@@ -27,6 +27,10 @@ class TeacherFactory extends Factory
             'position_title' => fake()->optional()->jobTitle(),
             'qualification_summary' => fake()->optional()->sentence(),
             'biography' => fake()->optional()->paragraph(),
+            'photo_media_id' => null,
+            'directory_slug' => null,
+            'is_publicly_visible' => false,
+            'published_at' => null,
             'birth_date' => fake()->optional()->dateTimeBetween('-60 years', '-22 years'),
             'birth_place' => fake()->optional()->city(),
             'gender' => fake()->optional()->randomElement(['L', 'P']),
@@ -63,6 +67,16 @@ class TeacherFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'employment_status' => TeacherEmploymentStatus::Retired,
             'employment_end_date' => fake()->dateTimeBetween('-5 years', 'now'),
+        ]);
+    }
+
+    public function publiclyVisible(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'directory_slug' => Str::slug((string) $attributes['legal_name']).'-'.Str::lower(Str::random(6)),
+            'is_publicly_visible' => true,
+            'published_at' => now()->subDay(),
+            'employment_status' => TeacherEmploymentStatus::Active,
         ]);
     }
 

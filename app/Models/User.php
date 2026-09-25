@@ -10,6 +10,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -51,6 +52,21 @@ class User extends Authenticatable implements MustVerifyEmail
     public function student(): HasOne
     {
         return $this->hasOne(Student::class);
+    }
+
+    public function notificationPreferences(): HasMany
+    {
+        return $this->hasMany(NotificationPreference::class);
+    }
+
+    public function assignedAdmissionApplications(): HasMany
+    {
+        return $this->hasMany(AdmissionApplication::class, 'assigned_reviewer_user_id');
+    }
+
+    public function admissionReviews(): HasMany
+    {
+        return $this->hasMany(AdmissionReview::class, 'reviewer_user_id');
     }
 
     public function profile(): Teacher|Student|null

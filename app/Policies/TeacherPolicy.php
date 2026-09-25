@@ -60,4 +60,14 @@ class TeacherPolicy
     {
         return $user->isActive() && $user->hasVerifiedEmail() && $user->isAdministrator();
     }
+
+    public function managePublicProfile(User $user, Teacher $teacher): bool
+    {
+        return $user->isActive() && $user->hasVerifiedEmail() && $user->isAdministrator();
+    }
+
+    public function publishPublicProfile(User $user, Teacher $teacher): bool
+    {
+        return $this->managePublicProfile($user, $teacher);
+    }
 }

@@ -44,6 +44,9 @@ class Student extends Model
         'phone',
         'email',
         'leaving_reason',
+        'birth_date',
+        'birth_place',
+        'gender',
     ];
 
     /**
@@ -85,6 +88,11 @@ class Student extends Model
     public function activeEnrollments(): HasMany
     {
         return $this->enrollments()->active();
+    }
+
+    public function convertedAdmissionApplications(): HasMany
+    {
+        return $this->hasMany(AdmissionApplication::class, 'converted_student_id');
     }
 
     public function currentEnrollment(): ?Enrollment

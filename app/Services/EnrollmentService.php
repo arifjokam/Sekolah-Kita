@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ClassStatus;
 use App\Enums\EnrollmentStatus;
 use App\Models\ClassModel;
 use App\Models\Enrollment;
@@ -15,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class EnrollmentService
 {
+    public function __construct(private readonly AuditLogService $audit) {}
+
     /**
      * Create an active enrollment while preserving the one-per-year invariant.
      */
@@ -29,7 +32,7 @@ class EnrollmentService
         Gate::forUser($actor)->authorize('create', Enrollment::class);
         Gate::forUser($actor)->authorize('manageEnrollments', $student);
 
-        return DB::transaction(function () use ($student, $class, $enrolledOn, $effectiveFrom, $transitionReason): Enrollment {
+        return DB::transaction(function () use ($actor, $student, $class, $enrolledOn, $effectiveFrom, $transitionReason): Enrollment {
             $lockedStudent = $this->lockStudent($student);
             $lockedClass = $this->lockClass($class);
 
@@ -45,11 +48,16 @@ class EnrollmentService
                 'transition_reason' => $transitionReason,
             ]);
 
+            $this->assertClassCanAcceptStudent($lockedClass);
             $this->assertNoActiveEnrollment(
                 (int) $lockedStudent->getKey(),
                 (int) $lockedClass->academic_year_id,
             );
             $enrollment->save();
+            $this->audit->recordOrFail($actor, 'enrollment.created', 'enrollment', $enrollment->getKey(), context: [
+                'status' => $enrollment->status->value,
+                'class_id' => $lockedClass->getKey(),
+            ]);
 
             return $enrollment;
         }, attempts: 3);
@@ -114,6 +122,7 @@ class EnrollmentService
                 'transition_reason' => null,
             ]);
 
+            $this->assertClassCanAcceptStudent($lockedTargetClass);
             $this->assertNoActiveEnrollment(
                 (int) $lockedStudent->getKey(),
                 (int) $lockedTargetClass->academic_year_id,
@@ -127,9 +136,39 @@ class EnrollmentService
             ])->save();
 
             $newEnrollment->save();
+            $this->audit->recordOrFail($actor, 'enrollment.transferred', 'enrollment', $newEnrollment->getKey(), context: [
+                'status' => $newEnrollment->status->value,
+                'previous_enrollment_id' => $lockedEnrollment->getKey(),
+                'class_id' => $lockedTargetClass->getKey(),
+            ]);
 
             return $newEnrollment;
         }, attempts: 3);
+    }
+
+    private function assertClassCanAcceptStudent(ClassModel $class): void
+    {
+        if ($class->status === ClassStatus::Closed) {
+            throw ValidationException::withMessages([
+                'class_id' => 'A closed class cannot accept a new enrollment.',
+            ]);
+        }
+
+        if ($class->capacity === null) {
+            return;
+        }
+
+        $activeEnrollmentCount = Enrollment::query()
+            ->where('class_id', $class->getKey())
+            ->active()
+            ->lockForUpdate()
+            ->count();
+
+        if ($activeEnrollmentCount >= $class->capacity) {
+            throw ValidationException::withMessages([
+                'class_id' => 'The selected class has reached its capacity.',
+            ]);
+        }
     }
 
     private function assertNoActiveEnrollment(

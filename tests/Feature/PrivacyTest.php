@@ -25,6 +25,9 @@ class PrivacyTest extends TestCase
         $this->assertArrayNotHasKey('address', $array);
         $this->assertArrayNotHasKey('phone', $array);
         $this->assertArrayNotHasKey('email', $array);
+        $this->assertArrayNotHasKey('birth_date', $array);
+        $this->assertArrayNotHasKey('birth_place', $array);
+        $this->assertArrayNotHasKey('gender', $array);
     }
 
     public function test_teacher_employee_number_not_in_arrayable(): void
@@ -37,6 +40,9 @@ class PrivacyTest extends TestCase
         $this->assertArrayNotHasKey('address', $array);
         $this->assertArrayNotHasKey('phone', $array);
         $this->assertArrayNotHasKey('email', $array);
+        $this->assertArrayNotHasKey('birth_date', $array);
+        $this->assertArrayNotHasKey('birth_place', $array);
+        $this->assertArrayNotHasKey('gender', $array);
     }
 
     public function test_guardian_data_not_in_arrayable(): void
@@ -81,6 +87,9 @@ class PrivacyTest extends TestCase
         $this->assertContains('phone', $hidden);
         $this->assertContains('email', $hidden);
         $this->assertContains('leaving_reason', $hidden);
+        $this->assertContains('birth_date', $hidden);
+        $this->assertContains('birth_place', $hidden);
+        $this->assertContains('gender', $hidden);
     }
 
     public function test_teacher_model_hidden_attributes(): void
@@ -93,6 +102,9 @@ class PrivacyTest extends TestCase
         $this->assertContains('address', $hidden);
         $this->assertContains('phone', $hidden);
         $this->assertContains('email', $hidden);
+        $this->assertContains('birth_date', $hidden);
+        $this->assertContains('birth_place', $hidden);
+        $this->assertContains('gender', $hidden);
     }
 
     public function test_guardian_model_hidden_attributes(): void

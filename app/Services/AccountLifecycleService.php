@@ -11,7 +11,10 @@ use Illuminate\Support\Facades\Log;
 
 class AccountLifecycleService
 {
-    public function __construct(private readonly UserSessionInvalidator $sessionInvalidator) {}
+    public function __construct(
+        private readonly UserSessionInvalidator $sessionInvalidator,
+        private readonly AuditLogService $audit,
+    ) {}
 
     public function activate(User $actor, User $user, UserRole $role): User
     {
@@ -59,7 +62,7 @@ class AccountLifecycleService
      */
     private function transition(User $actor, User $user, array $attributes, string $event): User
     {
-        $updatedUser = DB::transaction(function () use ($user, $attributes): User {
+        $updatedUser = DB::transaction(function () use ($actor, $user, $attributes, $event): User {
             $lockedUser = User::query()
                 ->whereKey($user->getKey())
                 ->lockForUpdate()
@@ -67,6 +70,10 @@ class AccountLifecycleService
 
             $lockedUser->forceFill($attributes);
             $this->sessionInvalidator->invalidate($lockedUser);
+            $this->audit->recordOrFail($actor, 'account.'.$event, 'user', $lockedUser->getKey(), context: [
+                'role' => $lockedUser->role?->value,
+                'status' => $lockedUser->status?->value,
+            ]);
 
             return $lockedUser;
         });

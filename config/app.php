@@ -65,7 +65,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------
@@ -78,7 +78,7 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'id'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
@@ -98,6 +98,16 @@ return [
     'cipher' => 'AES-256-CBC',
 
     'key' => env('APP_KEY'),
+
+    'trusted_proxies' => array_values(array_filter(
+        array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', ''))),
+        static fn (string $value): bool => $value !== '',
+    )),
+
+    'trusted_hosts' => array_values(array_filter(
+        array_map('trim', explode(',', (string) env('TRUSTED_HOSTS', ''))),
+        static fn (string $value): bool => $value !== '',
+    )),
 
     'previous_keys' => [
         ...array_filter(

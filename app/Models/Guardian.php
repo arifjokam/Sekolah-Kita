@@ -44,6 +44,11 @@ class Guardian extends Model
         return $this->hasMany(StudentGuardian::class);
     }
 
+    public function applicationGuardians(): HasMany
+    {
+        return $this->hasMany(ApplicationGuardian::class, 'canonical_guardian_id');
+    }
+
     public function students(): BelongsToMany
     {
         return $this->belongsToMany(Student::class, 'student_guardians')

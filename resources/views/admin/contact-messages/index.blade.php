@@ -1,0 +1,8 @@
+@extends('layouts.app')
+
+@section('title', 'Pesan kontak · Admin')
+
+@section('content')
+    <div class="mb-8"><p class="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Moderasi communications</p><h1 class="mt-2 text-3xl font-bold tracking-tight text-slate-950">Pesan kontak</h1><p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Pesan bersifat confidental dan hanya tersedia untuk administrator. Jangan membagikan isi pesan melalui log, URL, atau cache publik.</p></div>
+    <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-200 text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th class="px-5 py-3">Pengirim</th><th class="px-5 py-3">Subjek</th><th class="px-5 py-3">Diterima</th><th class="px-5 py-3">Status</th><th class="px-5 py-3 text-right">Aksi</th></tr></thead><tbody class="divide-y divide-slate-100">@forelse($messages as $message)<tr><td class="px-5 py-4 font-semibold text-slate-950">{{ $message->name }}</td><td class="px-5 py-4 text-slate-600">{{ $message->subject }}</td><td class="px-5 py-4 text-slate-600">{{ $message->created_at->format('d/m/Y H:i') }}</td><td class="px-5 py-4"><x-admin.status-badge :status="$message->status" /></td><td class="px-5 py-4 text-right"><a href="{{ route('admin.contact-messages.show', $message) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Tinjau</a></td></tr>@empty<tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-600">Belum ada pesan kontak.</td></tr>@endforelse</tbody></table></div></div><x-pagination :paginator="$messages" />
+@endsection
