@@ -10,6 +10,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -42,6 +43,25 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
+    public function teacher(): HasOne
+    {
+        return $this->hasOne(Teacher::class);
+    }
+
+    public function student(): HasOne
+    {
+        return $this->hasOne(Student::class);
+    }
+
+    public function profile(): Teacher|Student|null
+    {
+        return match ($this->role) {
+            UserRole::Guru => $this->teacher,
+            UserRole::Siswa => $this->student,
+            default => null,
+        };
+    }
+
     public function isActive(): bool
     {
         return $this->status === AccountStatus::Active;
@@ -68,5 +88,15 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isAdministrator(): bool
     {
         return $this->role === UserRole::Administrator;
+    }
+
+    public function isGuru(): bool
+    {
+        return $this->role === UserRole::Guru;
+    }
+
+    public function isSiswa(): bool
+    {
+        return $this->role === UserRole::Siswa;
     }
 }

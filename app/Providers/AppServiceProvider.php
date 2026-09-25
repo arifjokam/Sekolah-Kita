@@ -2,7 +2,25 @@
 
 namespace App\Providers;
 
+use App\Models\AcademicYear;
+use App\Models\ClassModel;
+use App\Models\ClassTeacherAssignment;
+use App\Models\Enrollment;
+use App\Models\Guardian;
+use App\Models\Student;
+use App\Models\Teacher;
+use App\Models\TeachingAssignment;
+use App\Models\Term;
 use App\Models\User;
+use App\Policies\AcademicYearPolicy;
+use App\Policies\ClassPolicy;
+use App\Policies\ClassTeacherAssignmentPolicy;
+use App\Policies\EnrollmentPolicy;
+use App\Policies\GuardianPolicy;
+use App\Policies\StudentPolicy;
+use App\Policies\TeacherPolicy;
+use App\Policies\TeachingAssignmentPolicy;
+use App\Policies\TermPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -30,6 +48,16 @@ class AppServiceProvider extends ServiceProvider
         Password::defaults(static fn (): Password => Password::min(12)->max(255));
 
         Gate::policy(User::class, UserPolicy::class);
+        Gate::policy(Teacher::class, TeacherPolicy::class);
+        Gate::policy(Student::class, StudentPolicy::class);
+        Gate::policy(Guardian::class, GuardianPolicy::class);
+        Gate::policy(AcademicYear::class, AcademicYearPolicy::class);
+        Gate::policy(Term::class, TermPolicy::class);
+        Gate::policy(ClassModel::class, ClassPolicy::class);
+        Gate::policy(ClassTeacherAssignment::class, ClassTeacherAssignmentPolicy::class);
+        Gate::policy(TeachingAssignment::class, TeachingAssignmentPolicy::class);
+        Gate::policy(Enrollment::class, EnrollmentPolicy::class);
+
         Gate::define('manage-users', static fn (User $user): bool => $user->isActive() && $user->hasVerifiedEmail() && $user->isAdministrator());
         Gate::define('access-administrator-area', static fn (User $user): bool => $user->isActive() && $user->hasVerifiedEmail() && $user->isAdministrator());
 
