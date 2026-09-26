@@ -56,6 +56,19 @@ class TermController extends Controller
             ->with('status', 'Term berhasil disimpan.');
     }
 
+    public function show(Term $term): View
+    {
+        Gate::authorize('view', $term);
+
+        $term->load('academicYear');
+        $term->loadCount('teachingAssignments');
+
+        return view('admin.terms.show', [
+            'term' => $term,
+            'statuses' => TermStatus::cases(),
+        ]);
+    }
+
     public function edit(Term $term): View
     {
         Gate::authorize('update', $term);

@@ -22,21 +22,30 @@
 @endphp
 
 
-{{-- Native date input; the browser submits an ISO date, which is what the domain stores. --}}
-<input
-    id="{{ $fieldId }}"
-    name="{{ $fieldName }}"
-    type="date"
-    value="{{ old($name, $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : $value) }}"
-    @if ($required) required @endif
-    @if ($min) min="{{ $min }}" @endif
-    @if ($max) max="{{ $max }}" @endif
-    @error($name) aria-invalid="true" aria-describedby="{{ $fieldId }}-error" @enderror
-    {{ $attributes->merge(['class' => 'mt-1 block w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-600/30']) }}
-/>
+{{--
+    Native date input with its label; the browser submits an ISO date, which is
+    what the domain stores. See x-form.text for why the label lives here.
+--}}
+<div>
+    <label for="{{ $fieldId }}" class="block text-sm font-semibold text-slate-800">
+        {{ $label }}@if ($required) <span class="text-rose-700">*</span>@endif
+    </label>
 
-@if ($hint)
-    <p class="mt-1 text-xs text-slate-500">{{ $hint }}</p>
-@endif
+    <input
+        id="{{ $fieldId }}"
+        name="{{ $fieldName }}"
+        type="date"
+        value="{{ old($name, $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : $value) }}"
+        @if ($required) required @endif
+        @if ($min) min="{{ $min }}" @endif
+        @if ($max) max="{{ $max }}" @endif
+        @error($name) aria-invalid="true" aria-describedby="{{ $fieldId }}-error" @enderror
+        {{ $attributes->merge(['class' => 'mt-1 block w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-600/30']) }}
+    />
 
-<x-form.field-error :name="$name" />
+    @if ($hint)
+        <p class="mt-1 text-xs text-slate-500">{{ $hint }}</p>
+    @endif
+
+    <x-form.field-error :name="$name" />
+</div>

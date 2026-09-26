@@ -25,7 +25,7 @@
 
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <x-admin.stat-card label="Status" :value="$academicYear->status->label()" :tone="$academicYear->isActive() ? 'accent' : 'muted'" />
-        <x-admin.stat-card label="Kelas" :value="$academicYears_classes ?? $academicYear->classes_count" />
+        <x-admin.stat-card label="Kelas" :value="$academicYear->classes_count" />
         <x-admin.stat-card label="Term" :value="$academicYear->terms_count" />
         <x-admin.stat-card label="Enrollment" :value="$academicYear->enrollments_count" />
     </div>

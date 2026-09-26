@@ -25,27 +25,34 @@
 @endphp
 
 {{--
-    Select control.
+    Select control with its label.
 
     $options is a map of value => label. The selected value comes from the old
     input first, then from the supplied model value, so a failed validation
-    round trip keeps the operator's choice.
+    round trip keeps the operator's choice. See x-form.text for why the whole
+    field is wrapped in one element.
 --}}
-<select
-    id="{{ $fieldId }}"
-    name="{{ $fieldName }}"
-    @if ($required) required @endif
-    @error($name) aria-invalid="true" aria-describedby="{{ $fieldId }}-error" @enderror
-    {{ $attributes->merge(['class' => 'mt-1 block w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-600/30 disabled:bg-slate-100']) }}
->
-    <option value="">{{ $blankLabel ?? $placeholder }}</option>
-    @foreach ($options as $optionValue => $optionLabel)
-        <option value="{{ $optionValue }}" @selected((string) old($name, $value) === (string) $optionValue)>{{ $optionLabel }}</option>
-    @endforeach
-</select>
+<div>
+    <label for="{{ $fieldId }}" class="block text-sm font-semibold text-slate-800">
+        {{ $label }}@if ($required) <span class="text-rose-700">*</span>@endif
+    </label>
 
-@if ($hint)
-    <p class="mt-1 text-xs text-slate-500">{{ $hint }}</p>
-@endif
+    <select
+        id="{{ $fieldId }}"
+        name="{{ $fieldName }}"
+        @if ($required) required @endif
+        @error($name) aria-invalid="true" aria-describedby="{{ $fieldId }}-error" @enderror
+        {{ $attributes->merge(['class' => 'mt-1 block w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-600/30 disabled:bg-slate-100']) }}
+    >
+        <option value="">{{ $blankLabel ?? $placeholder }}</option>
+        @foreach ($options as $optionValue => $optionLabel)
+            <option value="{{ $optionValue }}" @selected((string) old($name, $value) === (string) $optionValue)>{{ $optionLabel }}</option>
+        @endforeach
+    </select>
 
-<x-form.field-error :name="$name" />
+    @if ($hint)
+        <p class="mt-1 text-xs text-slate-500">{{ $hint }}</p>
+    @endif
+
+    <x-form.field-error :name="$name" />
+</div>

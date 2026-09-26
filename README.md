@@ -81,6 +81,7 @@ Dokumentasi lebih lengkap ada di `docs/`:
 - `ARCHITECTURE_DECISIONS.md` — keputusan arsitektur yang disetujui
 - `SECURITY_REVIEW.md` — tinjauan keamanan
 - `RICH_TEXT_EDITOR.md` — penyunting isi berita, unggah gambar, dan sanitasi
+- `BROWSER_VERIFICATION.md` — verifikasi end-to-end dengan Chromium sungguhan
 - `PRODUCTION_RUNBOOK.md` — prosedur operasional produksi
 - `PRODUCTION_CAPACITY_GUIDE.md` — panduan kapasitas
 
@@ -96,6 +97,7 @@ php artisan platform:heartbeat           # denyut scheduler
 php artisan news:prune-staged-article-images   # pembersihan gambar artikel terlantar
 npm run build                            # aset produksi
 npm run dev                              # Vite dev server
+npm run test:e2e                         # verifikasi browser (butuh server berjalan)
 ```
 
 Gaya kode mengikuti Laravel Pint:

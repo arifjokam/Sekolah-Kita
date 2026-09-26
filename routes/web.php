@@ -251,7 +251,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
         ->name('academic-years.status.update');
 
     Route::resource('terms', AdminTermController::class)
-        ->only(['index', 'create', 'store', 'edit', 'update']);
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     Route::patch('/terms/{term}/status', [AdminTermController::class, 'updateStatus'])->name('terms.status.update');
 
     Route::resource('classes', AdminClassController::class)
@@ -260,18 +260,18 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
     Route::patch('/classes/{class}/status', [AdminClassController::class, 'updateStatus'])->name('classes.status.update');
 
     Route::resource('subjects', AdminSubjectController::class)
-        ->only(['index', 'create', 'store', 'edit', 'update']);
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     Route::patch('/subjects/{subject}/status', [AdminSubjectController::class, 'updateStatus'])->name('subjects.status.update');
 
     Route::resource('teaching-assignments', AdminTeachingAssignmentController::class)
         ->parameters(['teaching-assignments' => 'teachingAssignment'])
-        ->only(['index', 'create', 'store', 'edit', 'update']);
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     Route::patch('/teaching-assignments/{teachingAssignment}/status', [AdminTeachingAssignmentController::class, 'updateStatus'])
         ->name('teaching-assignments.status.update');
 
     Route::resource('class-teacher-assignments', AdminClassTeacherAssignmentController::class)
         ->parameters(['class-teacher-assignments' => 'classTeacherAssignment'])
-        ->only(['index', 'create', 'store', 'edit', 'update']);
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     Route::patch('/class-teacher-assignments/{classTeacherAssignment}/status', [AdminClassTeacherAssignmentController::class, 'updateStatus'])
         ->name('class-teacher-assignments.status.update');
 

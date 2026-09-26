@@ -70,7 +70,8 @@
                             <td class="px-5 py-4"><x-admin.status-badge :status="$assignment->status->value" /></td>
                             <td class="px-5 py-4">
                                 <div class="flex flex-wrap justify-end gap-2">
-                                    <a href="{{ route('admin.teaching-assignments.edit', $assignment) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Edit</a>
+                                    <a href="{{ route('admin.teaching-assignments.show', $assignment) }}" class="font-semibold text-cyan-700 hover:text-cyan-900">{{ $assignment->teacher?->getDisplayName() ?? 'Guru dihapus' }}</a>
+                                <a href="{{ route('admin.teaching-assignments.edit', $assignment) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Edit</a>
                                     <form method="POST" action="{{ route('admin.teaching-assignments.status.update', $assignment) }}">
                                         @csrf
                                         @method('PATCH')

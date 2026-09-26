@@ -28,6 +28,37 @@ class RichTextEditorIntegrationTest extends TestCase
         return User::factory()->administrator()->create();
     }
 
+    /**
+     * The textarea has to sit inside the [data-rte-field] wrapper that the
+     * component renders, because mountRichTextEditor() pairs the two through
+     * that wrapper.
+     *
+     * This is a regression guard for a real defect: the textarea is a sibling of
+     * the mount root, and the script originally looked for it with
+     * root.querySelector(), which only searches descendants. It therefore always
+     * resolved to null and CKEditor never mounted at all, while every HTTP-level
+     * test still passed.
+     */
+    public function test_the_textarea_and_the_editor_mount_share_a_field_wrapper(): void
+    {
+        $response = $this->actingAs($this->admin())->get(route('admin.news.create'))->assertOk();
+
+        $html = $response->getContent();
+
+        $this->assertStringContainsString('data-rte-field', $html);
+
+        // The wrapper must open before the textarea and still be open when the
+        // mount root appears, so one [data-rte-field] encloses both.
+        $wrapper = strpos($html, 'data-rte-field');
+        $textarea = strpos($html, 'data-rte-input');
+        $mount = strpos($html, 'data-rich-text-editor');
+
+        $this->assertNotFalse($textarea, 'the textarea must carry data-rte-input');
+        $this->assertNotFalse($mount, 'the mount root must carry data-rich-text-editor');
+        $this->assertLessThan($textarea, $wrapper, 'the field wrapper must open before the textarea');
+        $this->assertLessThan($mount, $textarea, 'the textarea must come before the mount root');
+    }
+
     public function test_the_news_form_ships_a_real_editor_surface_and_keeps_the_textarea(): void
     {
         $this->actingAs($this->admin())->get(route('admin.news.create'))
@@ -37,8 +68,7 @@ class RichTextEditorIntegrationTest extends TestCase
             ->assertSee('data-rte-input', false)
             ->assertSee('data-rte-count', false)
             ->assertSee('data-rte-status', false)
-            // The upload endpoint the editor adapter posts to.
-            ->assertSee(route('admin.news.images.store'), false)
+            // The upload endpoint the editor adapter posts to.            ->assertSee(route('admin.news.images.store'), false)
             // The no-JavaScript fallback is a real, labelled textarea.
             ->assertSee('<textarea', false)
             ->assertSee('name="body"', false)

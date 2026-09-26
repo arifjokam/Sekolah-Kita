@@ -201,7 +201,11 @@ class SecureImageUploadAdapter {
  * @returns {Promise<{destroy: () => void, editor: object}>}
  */
 export async function mountRichTextEditor(root) {
-    const input = root.querySelector('[data-rte-input]');
+    // The textarea is a sibling of the mount root, not a descendant: it has to
+    // stay visible so the form still works before this script runs. The shared
+    // [data-rte-field] wrapper is therefore what pairs the two together.
+    const field = root.closest('[data-rte-field]') ?? root.parentElement;
+    const input = field?.querySelector('[data-rte-input]') ?? root.querySelector('[data-rte-input]');
     const statusRegion = root.querySelector('[data-rte-status]');
     const countRegion = root.querySelector('[data-rte-count]');
     const form = input?.form;
@@ -212,6 +216,12 @@ export async function mountRichTextEditor(root) {
 
     const placeholder = root.dataset.placeholder || 'Tulis isi berita di sini…';
     const label = (input.labels?.[0]?.textContent || 'Isi berita').replace('*', '').trim();
+
+    // An upload URL is optional. Without one there is no server pipeline to post
+    // to, so the image buttons are left out entirely rather than offered and
+    // then failing: the school profile editor has no image route.
+    const uploadUrl = root.dataset.uploadUrl || null;
+    const hasImageSupport = Boolean(uploadUrl);
 
     const surface = document.createElement('div');
     surface.className = 'rte-surface';
@@ -248,9 +258,7 @@ export async function mountRichTextEditor(root) {
                 'blockQuote',
                 'horizontalLine',
                 '|',
-                'imageUpload',
-                'insertImage',
-                '|',
+                ...(hasImageSupport ? ['imageUpload', 'insertImage', '|'] : []),
                 'alignment:left',
                 'alignment:center',
                 'alignment:right',
@@ -275,17 +283,23 @@ export async function mountRichTextEditor(root) {
                 reversed: true,
             },
         },
-        image: {
-            // Only the alt text widget is kept: the resize, style and caption
-            // widgets all persist inline styles or elements the sanitizer drops.
-            toolbar: ['imageTextAlternative'],
-            insert: {
-                integrations: ['upload', 'url'],
-                type: 'block',
-            },
-            styles: ['block'],
-            resizeUnit: '%',
-        },
+        image: hasImageSupport
+            ? {
+                // Only the alt text widget is kept: the resize, style and
+                // caption widgets all persist inline styles or elements the
+                // sanitizer drops.
+                toolbar: ['imageTextAlternative'],
+                // Only the upload integration is offered. A pasted or typed
+                // image URL would bypass the Laravel media pipeline entirely,
+                // so `url` is deliberately absent.
+                insert: {
+                    integrations: ['upload'],
+                    type: 'block',
+                },
+                styles: ['block'],
+                resizeUnit: '%',
+            }
+            : undefined,
         imageUpload: {
             types: ['jpeg', 'png', 'webp'],
         },
@@ -325,9 +339,10 @@ export async function mountRichTextEditor(root) {
             RemoveFormat,
             Undo,
             Fullscreen,
-            Image,
-            ImageUpload,
-            ImageTextAlternative,
+            // The image plugins are only loaded when an upload endpoint exists,
+            // so an editor without an image pipeline carries none of their
+            // behaviour, their balloons or their hidden file inputs.
+            ...(hasImageSupport ? [Image, ImageUpload, ImageTextAlternative] : []),
         ],
     });
 
@@ -360,12 +375,14 @@ export async function mountRichTextEditor(root) {
         window.requestAnimationFrame(syncInput);
     });
 
-    editor.plugins.get('FileRepository').createUploadAdapter = (loader) =>
-        new SecureImageUploadAdapter(loader, {
-            endpoint: root.dataset.uploadUrl,
-            root,
-            onStatus: setStatus,
-        });
+    if (hasImageSupport) {
+        editor.plugins.get('FileRepository').createUploadAdapter = (loader) =>
+            new SecureImageUploadAdapter(loader, {
+                endpoint: uploadUrl,
+                root,
+                onStatus: setStatus,
+            });
+    }
 
     // The textarea is hidden only now that the editing surface exists, so a
     // failed mount leaves an honest plain textarea rather than an empty shell.

@@ -46,6 +46,18 @@ class TeachingAssignmentController extends Controller
         ]);
     }
 
+    public function show(TeachingAssignment $teachingAssignment): View
+    {
+        Gate::authorize('view', $teachingAssignment);
+
+        $teachingAssignment->load(['teacher', 'class.academicYear', 'subject', 'academicYear', 'term']);
+
+        return view('admin.teaching-assignments.show', [
+            'assignment' => $teachingAssignment,
+            'statuses' => AssignmentStatus::cases(),
+        ]);
+    }
+
     public function create(Request $request): View
     {
         Gate::authorize('create', TeachingAssignment::class);

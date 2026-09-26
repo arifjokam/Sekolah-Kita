@@ -67,9 +67,9 @@ class PublicContentReader
                 'postal_code' => $profile->postal_code,
                 'public_phone' => $profile->public_phone,
                 'public_email' => $profile->public_email,
-                'vision' => $profile->vision,
-                'mission' => $profile->mission,
-                'about' => $profile->about,
+                'vision' => $this->mapProfileCopy($profile->vision),
+                'mission' => $this->mapProfileCopy($profile->mission),
+                'about' => $this->mapProfileCopy($profile->about),
                 'logo' => $this->mapMedia($profile->logoMedia),
                 'hero' => $this->mapMedia($profile->heroMedia),
             ];
@@ -527,6 +527,58 @@ class PublicContentReader
         $html = $this->sanitizer->sanitize($body, RichTextImageSourcePolicy::publicMediaObjectKeys());
 
         return $html === '' ? null : $html;
+    }
+
+    /**
+     * A profile field prepared for display.
+     *
+     * `html` is the sanitized markup for the profile page, `teaser` is the same
+     * content reduced to plain text for the one-line slots, and `is_html` says
+     * whether the stored value was rich text at all.
+     *
+     * The write path already ran these through the sanitizer, so sanitizing here
+     * is the same second line of defence the news body gets. No image source is
+     * permitted: the profile editor has no image button, so a stored <img> there
+     * could only have arrived from outside the application.
+     *
+     * @return array{text: string, teaser: string, is_html: bool}
+     */
+    private function mapProfileCopy(?string $value): array
+    {
+        if ($value === null || $value === '') {
+            return ['text' => '', 'teaser' => '', 'is_html' => false];
+        }
+
+        if (! RichTextSanitizer::looksLikeRichText($value)) {
+            return ['text' => $value, 'teaser' => $value, 'is_html' => false];
+        }
+
+        $html = $this->sanitizer->sanitize($value, RichTextImageSourcePolicy::denyAll());
+
+        if ($html === '') {
+            return ['text' => '', 'teaser' => '', 'is_html' => false];
+        }
+
+        return [
+            'text' => $html,
+            'teaser' => $this->toPlainText($html),
+            'is_html' => true,
+        ];
+    }
+
+    /**
+     * Reduce sanitized markup to readable plain text for a one-line slot.
+     *
+     * Block boundaries become spaces rather than newlines, because these values
+     * are rendered inside a single <p> on the homepage and in the footer.
+     */
+    private function toPlainText(string $html): string
+    {
+        $text = preg_replace('#<br\s*/?>|</(?:p|div|h[1-6]|li|blockquote)>#i', ' ', $html) ?? $html;
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
     }
 
     /**

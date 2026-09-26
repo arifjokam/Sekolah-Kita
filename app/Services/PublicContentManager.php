@@ -52,6 +52,8 @@ class PublicContentManager
             'postal_code',
             'public_phone',
             'public_email',
+            // The long-form fields are prepared by SchoolProfileContentService
+            // before they reach here, so they are not read raw from the request.
             'vision',
             'mission',
             'about',

@@ -87,7 +87,7 @@
             <div class="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.5fr_1fr_1fr] lg:px-8">
                 <div>
                     <p class="text-base font-bold text-slate-950">{{ $siteProfile['name'] ?? 'Sekolah Kita' }}</p>
-                    <p class="mt-3 max-w-md text-sm leading-6 text-slate-600">{{ $siteProfile['about'] ?? 'Informasi resmi sekolah tersedia di halaman profil.' }}</p>
+                    <p class="mt-3 max-w-md text-sm leading-6 text-slate-600">{{ $siteProfile['about']['teaser'] ?? 'Informasi resmi sekolah tersedia di halaman profil.' }}</p>
                 </div>
                 <div>
                     <p class="text-sm font-semibold text-slate-950">Jelajahi</p>

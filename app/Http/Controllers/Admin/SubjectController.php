@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AssignmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreSubjectRequest;
 use App\Http\Requests\Admin\UpdateSubjectRequest;
@@ -53,6 +54,25 @@ class SubjectController extends Controller
         return redirect()
             ->route('admin.subjects.index')
             ->with('status', 'Mata pelajaran berhasil disimpan.');
+    }
+
+    public function show(Subject $subject): View
+    {
+        Gate::authorize('view', $subject);
+
+        $subject->loadCount('teachingAssignments');
+        $subject->load([
+            'teachingAssignments' => fn ($query) => $query
+                ->with(['teacher', 'class'])
+                ->where('status', AssignmentStatus::Active->value)
+                ->orderByDesc('academic_year_id')
+                ->limit(25),
+        ]);
+
+        return view('admin.subjects.show', [
+            'subject' => $subject,
+            'statuses' => self::STATUSES,
+        ]);
     }
 
     public function edit(Subject $subject): View

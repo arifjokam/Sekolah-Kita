@@ -54,6 +54,7 @@
                             </td>
                             <td class="px-5 py-4">
                                 <div class="flex flex-wrap justify-end gap-2">
+                                    <a href="{{ route('admin.subjects.show', $subject) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Detail</a>
                                     <a href="{{ route('admin.subjects.edit', $subject) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Edit</a>
                                     <form method="POST" action="{{ route('admin.subjects.status.update', $subject) }}">
                                         @csrf
