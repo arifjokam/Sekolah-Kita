@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ContactMessageController as AdminContactMessageCo
 use App\Http\Controllers\Admin\GalleryAlbumController as AdminGalleryAlbumController;
 use App\Http\Controllers\Admin\GalleryItemController as AdminGalleryItemController;
 use App\Http\Controllers\Admin\NewsArticleController as AdminNewsArticleController;
+use App\Http\Controllers\Admin\NewsArticleImageController as AdminNewsArticleImageController;
 use App\Http\Controllers\Admin\SchoolProfileController as AdminSchoolProfileController;
 use App\Http\Controllers\Admin\TeacherDirectoryController as AdminTeacherDirectoryController;
 use App\Http\Controllers\AdministratorFoundationController;
@@ -110,6 +111,12 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
     Route::resource('news', AdminNewsArticleController::class)
         ->parameters(['news' => 'newsArticle'])
         ->except(['show', 'destroy']);
+    Route::post('/news/images', [AdminNewsArticleImageController::class, 'store'])
+        ->middleware('throttle:news-image-upload')
+        ->name('news.images.store');
+    Route::post('/news/{newsArticle}/images', [AdminNewsArticleImageController::class, 'storeForArticle'])
+        ->middleware('throttle:news-image-upload')
+        ->name('news.images.store-for-article');
     Route::post('/news/{newsArticle}/publish', [AdminNewsArticleController::class, 'publish'])->name('news.publish');
     Route::post('/news/{newsArticle}/unpublish', [AdminNewsArticleController::class, 'unpublish'])->name('news.unpublish');
     Route::post('/news/{newsArticle}/archive', [AdminNewsArticleController::class, 'archive'])->name('news.archive');

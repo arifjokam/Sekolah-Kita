@@ -7,3 +7,278 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/*
+| Sanitized rich text article body.
+|
+| The markup is reduced to the editor allowlist by RichTextSanitizer, so these
+| rules only style known elements. Alignment and image sizing arrive as data
+| attributes rather than inline styles, which is why no rule here trusts a style
+| attribute, and why an unknown data value simply renders unstyled.
+*/
+@layer components {
+    .rich-text > * + * {
+        margin-top: 1em;
+    }
+
+    .rich-text h2 {
+        margin-top: 1.75em;
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+        color: var(--color-slate-950);
+    }
+
+    .rich-text h3 {
+        margin-top: 1.5em;
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.4;
+        color: var(--color-slate-950);
+    }
+
+    .rich-text h4 {
+        margin-top: 1.5em;
+        font-size: 1.0625rem;
+        font-weight: 700;
+        line-height: 1.5;
+        color: var(--color-slate-900);
+    }
+
+    .rich-text ul,
+    .rich-text ol {
+        padding-left: 1.5rem;
+    }
+
+    .rich-text ul {
+        list-style-type: disc;
+    }
+
+    .rich-text ol {
+        list-style-type: decimal;
+    }
+
+    .rich-text li + li {
+        margin-top: 0.375rem;
+    }
+
+    .rich-text li > ul,
+    .rich-text li > ol {
+        margin-top: 0.375rem;
+    }
+
+    .rich-text blockquote {
+        border-left: 4px solid var(--color-cyan-200);
+        border-radius: 0 0.75rem 0.75rem 0;
+        background-color: var(--color-cyan-50);
+        padding: 0.75rem 1rem;
+        color: var(--color-slate-700);
+    }
+
+    .rich-text hr {
+        border-top: 1px solid var(--color-slate-200);
+    }
+
+    .rich-text a {
+        color: var(--color-cyan-800);
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    .rich-text a:hover {
+        color: var(--color-cyan-900);
+    }
+
+    .rich-text img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 0.75rem;
+    }
+
+    .rich-text [data-align='center'] {
+        text-align: center;
+    }
+
+    .rich-text [data-align='right'] {
+        text-align: right;
+    }
+
+    .rich-text [data-align='justify'] {
+        text-align: justify;
+    }
+
+    .rich-text img[data-align='center'] {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .rich-text img[data-width='25'] {
+        width: 25%;
+    }
+
+    .rich-text img[data-width='50'] {
+        width: 50%;
+    }
+
+    .rich-text img[data-width='75'] {
+        width: 75%;
+    }
+}
+
+/*
+| Rich text editor chrome.
+|
+| These classes style the editor surface and its toolbar inside the admin area.
+| The toolbar is sticky so the controls stay reachable while writing a long
+| article, and fullscreen turns the whole editor into a fixed overlay.
+*/
+@layer components {
+    .rte-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+    }
+
+    .rte-toolbar-button {
+        border-radius: 0.5rem;
+        color: var(--color-slate-600);
+        transition:
+            background-color 0.15s ease,
+            color 0.15s ease;
+    }
+
+    .rte-toolbar-button:hover {
+        background-color: var(--color-slate-200);
+        color: var(--color-slate-950);
+    }
+
+    .rte-toolbar-button:focus-visible {
+        outline: 2px solid var(--color-cyan-600);
+        outline-offset: 1px;
+    }
+
+    .rte-toolbar-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+    }
+
+    .rte-toolbar-button-active {
+        background-color: var(--color-cyan-100);
+        color: var(--color-cyan-900);
+    }
+
+    .rte-surface {
+        min-height: 20rem;
+        padding: 1rem;
+        font-size: 0.875rem;
+        line-height: 1.75;
+        color: var(--color-slate-800);
+    }
+
+    .rte-surface > * + * {
+        margin-top: 0.75rem;
+    }
+
+    .rte-surface h2 {
+        font-size: 1.375rem;
+        font-weight: 700;
+        color: var(--color-slate-950);
+    }
+
+    .rte-surface h3 {
+        font-size: 1.1875rem;
+        font-weight: 700;
+        color: var(--color-slate-950);
+    }
+
+    .rte-surface h4 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--color-slate-900);
+    }
+
+    .rte-surface ul,
+    .rte-surface ol {
+        padding-left: 1.5rem;
+    }
+
+    .rte-surface ul {
+        list-style-type: disc;
+    }
+
+    .rte-surface ol {
+        list-style-type: decimal;
+    }
+
+    .rte-surface li + li {
+        margin-top: 0.25rem;
+    }
+
+    .rte-surface blockquote {
+        border-left: 4px solid var(--color-cyan-200);
+        border-radius: 0 0.75rem 0.75rem 0;
+        background-color: var(--color-cyan-50);
+        padding: 0.5rem 0.875rem;
+    }
+
+    .rte-surface hr {
+        border-top: 1px solid var(--color-slate-200);
+    }
+
+    .rte-surface a {
+        color: var(--color-cyan-800);
+        font-weight: 600;
+        text-decoration: underline;
+    }
+
+    .rte-surface img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 0.75rem;
+    }
+
+    .rte-surface img.ProseMirror-selectednode {
+        outline: 2px solid var(--color-cyan-600);
+        outline-offset: 2px;
+    }
+
+    .rte-surface img[data-align='center'] {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .rte-surface img[data-width='50'] {
+        width: 50%;
+    }
+
+    .rte-surface img[data-width='100'] {
+        width: 100%;
+    }
+
+    .rte-surface p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        pointer-events: none;
+        color: var(--color-slate-400);
+    }
+
+    .rte-fullscreen {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .rte-fullscreen .rte-surface {
+        flex: 1;
+        overflow-y: auto;
+    }
+}

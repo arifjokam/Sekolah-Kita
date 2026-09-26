@@ -211,5 +211,23 @@ class AppServiceProvider extends ServiceProvider
 
             return $limits;
         });
+
+        /*
+         * Article body image uploads.
+         *
+         * Each accepted image is decoded, re-encoded and written to two disks, so
+         * an unbounded upload loop is a disk exhaustion vector even for an
+         * authenticated administrator.
+         */
+        RateLimiter::for('news-image-upload', function (Request $request): array {
+            $ipHash = hash('sha256', (string) $request->ip());
+            $userId = (string) ($request->user()?->getKey() ?? 'guest');
+
+            return [
+                Limit::perMinute(30)->by('news-image-upload-user:'.$userId),
+                Limit::perHour(120)->by('news-image-upload-hour:'.$userId),
+                Limit::perMinute(60)->by('news-image-upload-ip:'.$ipHash),
+            ];
+        });
     }
 }

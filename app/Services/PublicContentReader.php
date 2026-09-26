@@ -20,6 +20,7 @@ class PublicContentReader
 {
     public function __construct(
         private readonly MediaAssetService $mediaAssets,
+        private readonly RichTextSanitizer $sanitizer,
         private readonly PublicContentCache $cache,
     ) {}
 
@@ -502,10 +503,30 @@ class PublicContentReader
             'slug' => $article->slug,
             'excerpt' => $article->excerpt,
             'body' => $article->body ?? null,
+            'body_html' => $this->mapNewsBody($article->body),
             'published_at' => $article->published_at?->toIso8601String(),
             'published_at_label' => $this->dateTimeLabel($article->published_at),
             'cover' => $this->mapMedia($article->coverMedia),
         ];
+    }
+
+    /**
+     * Rich text bodies are sanitized again on the way out.
+     *
+     * The write path already sanitizes, so this is a second line of defence: a
+     * body that reached the database by any other route still cannot render a
+     * script, an event handler or an unapproved image source. A body that is not
+     * rich text returns null and keeps rendering as escaped plain text.
+     */
+    private function mapNewsBody(?string $body): ?string
+    {
+        if ($body === null || ! RichTextSanitizer::looksLikeRichText($body)) {
+            return null;
+        }
+
+        $html = $this->sanitizer->sanitize($body, RichTextImageSourcePolicy::publicMediaObjectKeys());
+
+        return $html === '' ? null : $html;
     }
 
     /**

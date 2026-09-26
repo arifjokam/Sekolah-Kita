@@ -98,6 +98,21 @@ if ($pruneFailedAfterDays !== null && (int) $pruneFailedAfterDays > 0) {
 |
 */
 
+/*
+| Abandoned article body images
+|
+| An image uploaded from the article create screen is published as soon as it is
+| uploaded, so an abandoned draft would otherwise leave a public file behind
+| forever. The command only ever discards assets that no other reference points
+| at.
+|
+*/
+
+Schedule::command('news:prune-staged-article-images')
+    ->hourly()
+    ->withoutOverlapping(15)
+    ->onOneServer();
+
 Schedule::command('platform:heartbeat')
     ->everyMinute()
     ->withoutOverlapping(2)

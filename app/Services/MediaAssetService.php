@@ -11,6 +11,7 @@ use App\Models\ApplicationDocument;
 use App\Models\GalleryItem;
 use App\Models\MediaAsset;
 use App\Models\NewsArticle;
+use App\Models\NewsArticleMedia;
 use App\Models\SchoolProfile;
 use App\Models\Teacher;
 use App\Models\User;
@@ -22,7 +23,11 @@ use Throwable;
 
 class MediaAssetService
 {
-    private const MAX_BYTES = 5_242_880;
+    /**
+     * Maximum accepted upload size in bytes. Public so the upload endpoints and
+     * the editor contract can advertise exactly what the service enforces.
+     */
+    public const MAX_IMAGE_BYTES = 5_242_880;
 
     private const MAX_WIDTH = 6_000;
 
@@ -190,6 +195,16 @@ class MediaAssetService
         ])->save();
     }
 
+    /**
+     * Decide whether a public derivative of this asset must exist.
+     *
+     * An image embedded in a news article body is treated differently from every
+     * other reference on purpose. The article body stores the public media URL
+     * as plain HTML, and every publicization mints a new random object key, so
+     * the URL is only stable for as long as the derivative is never withdrawn.
+     * The reference therefore counts in any article state, and withdrawing the
+     * derivative is deferred to the moment the image is removed from the body.
+     */
     private function hasPublicReference(MediaAsset $mediaAsset): bool
     {
         $mediaId = $mediaAsset->getKey();
@@ -199,6 +214,7 @@ class MediaAssetService
             ->orWhere('hero_media_id', $mediaId)
             ->exists()
             || NewsArticle::query()->published()->where('cover_media_id', $mediaId)->exists()
+            || NewsArticleMedia::query()->where('media_asset_id', $mediaId)->exists()
             || Achievement::query()->published()->where('cover_media_id', $mediaId)->exists()
             || Teacher::query()->publiclyVisible()->where('photo_media_id', $mediaId)->exists()
             || GalleryItem::query()
@@ -217,6 +233,7 @@ class MediaAssetService
             ->orWhere('hero_media_id', $mediaId)
             ->exists()
             || NewsArticle::query()->where('cover_media_id', $mediaId)->exists()
+            || NewsArticleMedia::query()->where('media_asset_id', $mediaId)->exists()
             || Achievement::query()->where('cover_media_id', $mediaId)->exists()
             || Teacher::query()->where('photo_media_id', $mediaId)->exists()
             || GalleryItem::query()->where('media_asset_id', $mediaId)->exists()
@@ -230,7 +247,7 @@ class MediaAssetService
     {
         $size = $file->getSize();
 
-        if ($file->getError() !== UPLOAD_ERR_OK || $size === false || $size > self::MAX_BYTES) {
+        if ($file->getError() !== UPLOAD_ERR_OK || $size === false || $size > self::MAX_IMAGE_BYTES) {
             throw new RuntimeException('The uploaded image is invalid or too large.');
         }
 

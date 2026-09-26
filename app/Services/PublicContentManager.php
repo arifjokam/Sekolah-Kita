@@ -22,6 +22,7 @@ class PublicContentManager
 {
     public function __construct(
         private readonly MediaAssetService $mediaAssets,
+        private readonly NewsArticleBodyImageService $newsBodyImages,
         private readonly PublicContentCache $cache,
         private readonly AuditLogService $audit,
     ) {}
@@ -105,7 +106,13 @@ class PublicContentManager
     {
         Gate::forUser($actor)->authorize('create', NewsArticle::class);
 
-        $payload = Arr::only($data, ['title', 'slug', 'excerpt', 'body']);
+        $payload = Arr::only($data, ['title', 'slug', 'excerpt']);
+        $body = $this->newsBodyImages->prepareBody($actor, null, $data['body'] ?? null);
+
+        if ($body !== null) {
+            $payload['body'] = $body;
+        }
+
         $media = $this->storeOptionalMedia($cover, $actor);
         $article = NewsArticle::query()->create([
             ...$payload,
@@ -116,6 +123,7 @@ class PublicContentManager
             'archived_at' => null,
         ]);
 
+        $this->newsBodyImages->synchronizeReferences($article);
         $this->cache->invalidate('news');
         $this->logChange($actor, 'news_article', $article, 'created');
 
@@ -129,7 +137,13 @@ class PublicContentManager
     {
         Gate::forUser($actor)->authorize('update', $article);
 
-        $payload = Arr::only($data, ['title', 'slug', 'excerpt', 'body']);
+        $payload = Arr::only($data, ['title', 'slug', 'excerpt']);
+        $body = $this->newsBodyImages->prepareBody($actor, $article, $data['body'] ?? null);
+
+        if ($body !== null) {
+            $payload['body'] = $body;
+        }
+
         $oldCoverId = $article->cover_media_id;
         $newCover = $this->storeOptionalMedia($cover, $actor);
 
@@ -138,6 +152,7 @@ class PublicContentManager
         }
 
         $article->fill($payload)->save();
+        $this->newsBodyImages->synchronizeReferences($article);
         $this->synchronizeMedia($newCover);
         $this->withdrawReplacedMedia($oldCoverId, $article->cover_media_id);
 

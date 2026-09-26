@@ -345,3 +345,50 @@ the controls in §2.1 credible rather than aspirational.
 **Not covered by any check, and cannot be:** whether a scanner exists. That is a
 process attestation, recorded in the go/no-go document, not something software
 can assert about itself.
+
+---
+
+# Part 3 — Rich text article body (added with the rich text editor)
+
+The news body is now authored as HTML by a browser editor, which makes it an
+untrusted HTML producer. The controls below are additive; nothing in Parts 1 and
+2 changed. Full detail is in [`RICH_TEXT_EDITOR.md`](RICH_TEXT_EDITOR.md).
+
+## 3.1 What is implemented and verified
+
+| Control | Implementation | Notes |
+| --- | --- | --- |
+| Server-side sanitization | `RichTextSanitizer` on `symfony/html-sanitizer`, allowlist of 16 elements and 8 attributes | Applied on write *and* re-applied on read inside the cache closure |
+| No inline script or style | `style` is not in the allowlist; alignment and image sizing are stored as `data-align` / `data-width` | A stored body never carries a `style` attribute |
+| Event handler attributes | Not in the allowlist; `on*` is dropped | Verified for `onclick`, `onerror`, `onmouseover` |
+| Link scheme control | `http`, `https`, `mailto`, `tel` only, relative links refused, `rel` forced on every link | `javascript:` and `data:` are dropped, link text preserved |
+| Embedding elements | `script`, `iframe`, `object`, `embed`, `svg`, `form`, `style` and friends dropped with their content | |
+| No inline image data | Base64 is not accepted and the image extension is configured with `allowBase64: false` | Images only ever exist as a media URL |
+| Image source allowlist | `img[src]` is rewritten to the canonical public URL of a `media_assets` row that belongs to this article or to this editor session | A rewritten host, a foreign article's image, another administrator's staged image, and `data:` are all removed |
+| Upload validation | Form request rules plus `getimagesize` plus decode/re-encode in `MediaAssetService` | Extension, sniffed MIME and real image header must agree |
+| Upload limits | 5 MB, 6.000 x 6.000 px, 20 megapixels, JPG/PNG/WEBP only | |
+| Storage naming | Random `media/<uuid>.<ext>`; the original filename is never trusted and never returned | |
+| Upload authorization | Administrator only, server side, via `NewsArticlePolicy::uploadBodyImage` and `MediaAssetPolicy::create` | The endpoint is not reachable by a guest, a guru, or a siswa |
+| Upload throttling | `news-image-upload`: 30/min and 120/hour per user, 60/min per IP | Each accepted image is decoded, re-encoded and written twice |
+| Response minimalism | `id`, public `url`, `width`, `height`, `mime_type`, `max_bytes` | No private object key, no disk name, no original filename |
+| Reference tracking | `news_article_media` | Prevents a still-referenced image from losing its public derivative |
+| Legacy content safety | A body that is not rich text is stored and rendered exactly as before | Articles written before the editor existed are untouched |
+
+## 3.2 Known, accepted boundaries
+
+| Boundary | Why it is acceptable |
+| --- | --- |
+| A body image is published as soon as it is uploaded, including while the article is still a draft | The body stores a public URL, and every republication mints a new object key, so a stable URL requires the derivative to exist. Mitigated by the mandatory privacy review checkbox, the administrator-only endpoint, and `news:prune-staged-article-images` for abandoned uploads |
+| The body limit of 20.000 characters applies to stored markup, not to prose | Pre-existing limit, unchanged. The editor shows a live character count so the limit is visible before saving |
+| No markdown, no code block, no tables | The allowlist deliberately contains only what a school news article needs |
+
+## 3.3 Tests
+
+`tests/Unit/RichTextSanitizerTest.php` covers the sanitizer contract in
+isolation, including a regression test for the boolean scoping of the image
+allowlist. `tests/Feature/NewsRichTextEditorTest.php` covers the end-to-end
+flow: create and edit with rich HTML, script and handler removal, `javascript:`
+rejection, preserved headings and lists and images, upload authorization for
+guests and non-administrators, upload rejection for bad type and bad size,
+plain-text backward compatibility, the unchanged publication workflow, and
+public rendering of sanitized rich content.

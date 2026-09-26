@@ -17,6 +17,16 @@ return [
         'max_document_bytes' => (int) env('PPDB_MAX_DOCUMENT_BYTES', 10_485_760),
     ],
 
+    'news' => [
+        /*
+         * How long an image uploaded from the article create screen survives
+         * before news:prune-staged-article-images treats it as abandoned. The
+         * window has to cover a slow writing session, because the image is
+         * published to the public disk as soon as it is uploaded.
+         */
+        'staged_image_ttl_hours' => (int) env('NEWS_STAGED_IMAGE_TTL_HOURS', 6),
+    ],
+
     'platform' => [
         'redis_required_in_production' => (bool) env('REDIS_REQUIRED_IN_PRODUCTION', true),
         'health_check_timeout_seconds' => (int) env('HEALTH_CHECK_TIMEOUT_SECONDS', 2),
