@@ -59,6 +59,16 @@ class AcademicYear extends Model
         return $this->hasMany(TeachingAssignment::class);
     }
 
+    public function classSchedules(): HasMany
+    {
+        return $this->hasMany(ClassSchedule::class, 'academic_year_id');
+    }
+
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class, 'academic_year_id');
+    }
+
     public function isActive(): bool
     {
         return $this->status === AcademicYearStatus::Active;

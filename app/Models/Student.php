@@ -91,6 +91,11 @@ class Student extends Model
         return $this->enrollments()->active();
     }
 
+    public function attendanceRecords(): HasMany
+    {
+        return $this->hasMany(AttendanceRecord::class, 'student_id');
+    }
+
     public function convertedAdmissionApplications(): HasMany
     {
         return $this->hasMany(AdmissionApplication::class, 'converted_student_id');

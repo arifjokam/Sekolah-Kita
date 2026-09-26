@@ -40,7 +40,10 @@ use Throwable;
  */
 class DashboardPresenter
 {
-    public function __construct(private readonly HealthCheckService $health) {}
+    public function __construct(
+        private readonly HealthCheckService $health,
+        private readonly ApplicantPortalService $portal,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -245,6 +248,39 @@ class DashboardPresenter
                 ['label' => 'PPDB', 'route' => 'ppdb.index'],
             ],
         ];
+    }
+
+    /**
+     * The PPDB applicant landing page.
+     *
+     * Delegates to ApplicantPortalService::progress() so the dashboard and the
+     * detailed portal screens can never disagree about what is still missing.
+     * A candidate with no application at all gets an explanatory page rather than
+     * a blank one.
+     *
+     * @return array<string, mixed>
+     */
+    public function forApplicant(User $user): array
+    {
+        $application = $this->portal->currentApplication($user, true);
+
+        if (! $application instanceof AdmissionApplication) {
+            return [
+                'application' => null,
+                'hasApplication' => false,
+                'openPeriod' => $this->activePeriod(),
+                'recentNotifications' => $user->notifications()->orderByDesc('created_at')->limit(6)->get(),
+                'unreadNotificationCount' => $user->unreadNotifications()->count(),
+            ];
+        }
+
+        $progress = $this->portal->progress($user, $application);
+
+        return array_merge($progress, [
+            'hasApplication' => true,
+            'recentNotifications' => $user->notifications()->orderByDesc('created_at')->limit(6)->get(),
+            'unreadNotificationCount' => $user->unreadNotifications()->count(),
+        ]);
     }
 
     private function activePeriod(): ?AdmissionPeriod

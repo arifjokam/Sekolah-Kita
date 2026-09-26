@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', $term->label.' · Admin')
+@section('title', $term->semesterLabel().' · Admin')
 
 @section('content')
     @php
         $breadcrumbs = [
             ['label' => 'Dashboard', 'route' => 'dashboard.administrator'],
-            ['label' => 'Term', 'route' => 'admin.terms.index'],
-            ['label' => $term->label],
+            ['label' => 'Semester', 'route' => 'admin.terms.index'],
+            ['label' => $term->semesterLabel()],
         ];
     @endphp
 
@@ -24,14 +24,14 @@
 
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <x-admin.stat-card label="Status" :value="$term->status->label()" :tone="$term->isActive() ? 'accent' : 'muted'" />
-        <x-admin.stat-card label="Urutan" :value="$term->sequence" />
+        <x-admin.stat-card label="Nomor semester" :value="$term->sequence" />
         <x-admin.stat-card label="Assignment" :value="$term->teaching_assignments_count" />
         <x-admin.stat-card label="Tahun ajaran" :value="$term->academicYear?->code ?? '—'" />
     </div>
 
     <div class="mt-8 grid gap-6 lg:grid-cols-2">
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="detail-heading">
-            <h2 id="detail-heading" class="text-lg font-bold text-slate-950">Detail term</h2>
+            <h2 id="detail-heading" class="text-lg font-bold text-slate-950">Detail semester</h2>
 
             <dl class="mt-4 space-y-3 text-sm">
                 <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tahun ajaran</dt><dd class="mt-1 text-slate-900">{{ $term->academicYear?->label ?? '—' }}</dd></div>
@@ -50,7 +50,7 @@
 
                 <x-form.select
                     name="status"
-                    label="Status term"
+                    label="Status semester"
                     :value="$term->status->value"
                     :options="collect($statuses)->mapWithKeys(fn ($status) => [$status->value => $status->label()])"
                     required

@@ -98,7 +98,12 @@ class AcademicMasterDataTest extends TestCase
     public function test_administrator_creates_a_term_inside_an_academic_year(): void
     {
         $admin = $this->admin();
-        $year = AcademicYear::factory()->active()->create();
+        // The dates come from the year rather than being hard-coded: a semester
+        // must sit inside the academic year it belongs to, which is now a rule.
+        $year = AcademicYear::factory()->active()->create([
+            'starts_on' => '2026-07-01',
+            'ends_on' => '2027-06-30',
+        ]);
 
         $this->actingAs($admin)->post(route('admin.terms.store'), [
             'academic_year_id' => $year->id,

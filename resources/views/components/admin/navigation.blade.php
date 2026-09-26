@@ -37,12 +37,13 @@
             'label' => 'Akademik',
             'items' => [
                 ['label' => 'Tahun ajaran', 'route' => 'admin.academic-years.index', 'pattern' => 'admin.academic-years.*'],
-                ['label' => 'Term', 'route' => 'admin.terms.index', 'pattern' => 'admin.terms.*'],
+                ['label' => 'Semester', 'route' => 'admin.terms.index', 'pattern' => 'admin.terms.*'],
                 ['label' => 'Kelas', 'route' => 'admin.classes.index', 'pattern' => 'admin.classes.*'],
                 ['label' => 'Mata pelajaran', 'route' => 'admin.subjects.index', 'pattern' => 'admin.subjects.*'],
                 ['label' => 'Guru', 'route' => 'admin.teachers.index', 'pattern' => 'admin.teachers.*'],
                 ['label' => 'Siswa', 'route' => 'admin.students.index', 'pattern' => 'admin.students.*'],
                 ['label' => 'Enrollment', 'route' => 'admin.enrollments.index', 'pattern' => 'admin.enrollments.*'],
+                ['label' => 'Jadwal pelajaran', 'route' => 'admin.class-schedules.index', 'pattern' => 'admin.class-schedules.*'],
                 ['label' => 'Assignment', 'route' => 'admin.teaching-assignments.index', 'pattern' => 'admin.teaching-assignments.*'],
                 ['label' => 'Wali kelas', 'route' => 'admin.class-teacher-assignments.index', 'pattern' => 'admin.class-teacher-assignments.*'],
             ],
@@ -53,6 +54,8 @@
                 ['label' => 'Periode PPDB', 'route' => 'admin.ppdb.periods.index', 'pattern' => 'admin.ppdb.periods.*'],
                 ['label' => 'Pendaftar', 'route' => 'admin.ppdb.applications.index', 'pattern' => 'admin.ppdb.applications.*'],
                 ['label' => 'Review', 'route' => 'admin.ppdb.review.index', 'pattern' => 'admin.ppdb.review.*'],
+                ['label' => 'Dokumen', 'route' => 'admin.ppdb.review.index', 'pattern' => 'admin.ppdb.documents.*'],
+                ['label' => 'Status', 'route' => 'admin.ppdb.applications.index', 'pattern' => 'admin.ppdb.applications.*'],
             ],
         ],
         [

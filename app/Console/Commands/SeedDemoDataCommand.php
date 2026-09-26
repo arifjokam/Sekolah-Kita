@@ -49,6 +49,8 @@ class SeedDemoDataCommand extends Command
         $this->components->twoColumnDetail('Administrator', 'admin.test@sekolah.local');
         $this->components->twoColumnDetail('Guru', 'guru.test@sekolah.local');
         $this->components->twoColumnDetail('Siswa', 'siswa.test@sekolah.local');
+        $this->components->twoColumnDetail('Calon PPDB (diajukan)', 'calon.lengkap@sekolah.local');
+        $this->components->twoColumnDetail('Calon PPDB (perbaikan dokumen)', 'calon.perbaikan@sekolah.local');
         $this->components->twoColumnDetail('Password (dev only)', DevelopmentAccountsSeeder::PASSWORD);
 
         return self::SUCCESS;

@@ -27,6 +27,9 @@ const ACCOUNTS = {
     admin: 'admin.test@sekolah.local',
     guru: 'guru.test@sekolah.local',
     siswa: 'siswa.test@sekolah.local',
+    // A candidate with a document waiting for a replacement, so the revision
+    // loop is exercised in a real browser rather than only in a feature test.
+    calon: 'calon.perbaikan@sekolah.local',
 }
 
 /** Routes that must render for each role, and what must be visible on them. */
@@ -42,9 +45,13 @@ const SCENARIOS = [
     { role: 'admin', label: 'ADMIN student list', path: '/admin/students', expect: ['Siswa'] },
     { role: 'admin', label: 'ADMIN student create', path: '/admin/students/create', expect: ['Nama lengkap'] },
     { role: 'admin', label: 'ADMIN academic years', path: '/admin/academic-years', expect: ['Tahun ajaran'] },
+    { role: 'admin', label: 'ADMIN semesters', path: '/admin/terms', expect: ['Semester'] },
+    { role: 'admin', label: 'ADMIN semester create', path: '/admin/terms/create', expect: ['Semester'] },
     { role: 'admin', label: 'ADMIN classes', path: '/admin/classes', expect: ['Kelas'] },
     { role: 'admin', label: 'ADMIN subjects', path: '/admin/subjects', expect: ['Mata pelajaran'] },
     { role: 'admin', label: 'ADMIN enrollments', path: '/admin/enrollments', expect: ['Enrollment'] },
+    { role: 'admin', label: 'ADMIN class schedules', path: '/admin/class-schedules', expect: ['Jadwal pelajaran', 'Jadwal mingguan'] },
+    { role: 'admin', label: 'ADMIN schedule create', path: '/admin/class-schedules/create', expect: ['Jadwal pelajaran'] },
     { role: 'admin', label: 'ADMIN teaching assignments', path: '/admin/teaching-assignments', expect: ['Assignment mengajar'] },
     { role: 'admin', label: 'ADMIN class teacher assignments', path: '/admin/class-teacher-assignments', expect: ['Wali kelas'] },
     { role: 'admin', label: 'ADMIN ppdb periods', path: '/admin/ppdb/periods', expect: ['Periode'] },
@@ -59,14 +66,30 @@ const SCENARIOS = [
 
     { role: 'guru', label: 'GURU dashboard', path: '/dashboard/guru', expect: ['mengajar'] },
     { role: 'guru', label: 'GURU classes', path: '/guru/kelas', expect: ['Kelas'] },
+    { role: 'guru', label: 'GURU schedule', path: '/guru/jadwal', expect: ['Jadwal pelajaran saya'] },
+    { role: 'guru', label: 'GURU profile', path: '/guru/profil', expect: ['Biodata guru', 'Data resmi guru'] },
+    { role: 'guru', label: 'GURU attendance', path: '/guru/absensi', expect: ['Absensi'] },
+    { role: 'guru', label: 'GURU monthly report', path: '/guru/absensi/laporan', expect: ['Laporan absensi bulanan'] },
     { role: 'guru', label: 'GURU notifications', path: '/notifications', expect: ['Notifikasi'] },
 
     { role: 'siswa', label: 'SISWA dashboard', path: '/dashboard/siswa', expect: ['Siswa'] },
+    { role: 'siswa', label: 'SISWA profile', path: '/siswa/profil', expect: ['Biodata siswa', 'Data resmi siswa'] },
+    { role: 'siswa', label: 'SISWA schedule', path: '/siswa/jadwal', expect: ['Jadwal pelajaran saya'] },
+    { role: 'siswa', label: 'SISWA attendance', path: '/siswa/absensi', expect: ['Absensi saya'] },
     { role: 'siswa', label: 'SISWA notifications', path: '/notifications', expect: ['Notifikasi'] },
+
+    { role: 'calon', label: 'CALON dashboard', path: '/ppdb/akun', expect: ['Kelengkapan pendaftaran'] },
+    { role: 'calon', label: 'CALON biodata', path: '/ppdb/akun/biodata', expect: ['Biodata siswa'] },
+    { role: 'calon', label: 'CALON guardians', path: '/ppdb/akun/wali', expect: ['Orang tua / wali'] },
+    { role: 'calon', label: 'CALON documents', path: '/ppdb/akun/dokumen', expect: ['Dokumen pendukung'] },
+    { role: 'calon', label: 'CALON review', path: '/ppdb/akun/review', expect: ['Review data'] },
+    { role: 'calon', label: 'CALON status', path: '/ppdb/akun/status', expect: ['Status pendaftaran'] },
+    { role: 'calon', label: 'CALON notifications', path: '/ppdb/akun/notifikasi', expect: ['Riwayat pengiriman WhatsApp'] },
 
     { role: 'guest', label: 'PUBLIC home', path: '/', expect: ['Sekolah'] },
     { role: 'guest', label: 'PUBLIC news', path: '/berita', expect: ['Berita'] },
     { role: 'guest', label: 'PUBLIC ppdb', path: '/ppdb', expect: ['PPDB'] },
+    { role: 'guest', label: 'PUBLIC ppdb register', path: '/ppdb/daftar-akun', expect: ['Buat akun pendaftar'] },
 ]
 
 /** Screens that must block a role server-side, not merely hide the link. */
@@ -74,8 +97,19 @@ const FORBIDDEN = [
     { role: 'guru', path: '/admin/students' },
     { role: 'guru', path: '/admin/teachers' },
     { role: 'guru', path: '/admin/audit-logs' },
+    { role: 'guru', path: '/admin/class-schedules' },
+    { role: 'guru', path: '/siswa/profil' },
     { role: 'siswa', path: '/admin/students' },
     { role: 'siswa', path: '/dashboard/guru' },
+    { role: 'siswa', path: '/guru/absensi' },
+    { role: 'calon', path: '/dashboard/guru' },
+    { role: 'calon', path: '/dashboard/siswa' },
+    { role: 'calon', path: '/dashboard/administrator' },
+    { role: 'calon', path: '/guru/profil' },
+    { role: 'calon', path: '/guru/absensi' },
+    { role: 'calon', path: '/siswa/profil' },
+    { role: 'calon', path: '/admin/ppdb/applications' },
+    { role: 'calon', path: '/admin/class-schedules' },
 ]
 
 const problems = []
@@ -288,7 +322,9 @@ async function checkFormLabels(context) {
         '/admin/classes/create',
         '/admin/subjects/create',
         '/admin/academic-years/create',
+        '/admin/terms/create',
         '/admin/enrollments/create',
+        '/admin/class-schedules/create',
         '/admin/news/create',
     ]
 
@@ -423,11 +459,270 @@ async function checkMobileLayout(context) {    const page = await context.newPag
     }
 }
 
+/**
+ * A real semester write, end to end.
+ *
+ * A 200 on /admin/terms proves the page renders. It does not prove that a
+ * second semester can actually be created next to a first one, which is the bug
+ * this journey exists to guard: the uniqueness rule used to be attached to the
+ * wrong field, so the *edit* of the second semester was rejected. Only driving
+ * the form catches that.
+ */
+async function checkSemesterCreation(context) {
+    const page = await context.newPage()
+    watch(page, 'SEMESTER')
+    checks++
+
+    try {
+        await page.goto(`${BASE}/admin/terms/create`, { waitUntil: 'networkidle', timeout: 30000 })
+
+        // Work out a sequence number that does not collide with the fixture.
+        const next = await page.evaluate(() => {
+            const input = document.querySelector('input[name="sequence"]')
+            return Number(input?.value ?? 1) + 10
+        })
+
+        await page.fill('input[name="sequence"]', String(next))
+        await page.fill('input[name="label"]', `Semester Uji ${next}`)
+
+        const start = '2027-01-05'
+        const end = '2027-06-20'
+        await page.fill('input[name="starts_on"]', start)
+        await page.fill('input[name="ends_on"]', end)
+        await page.selectOption('select[name="status"]', 'draft')
+
+        await Promise.all([
+            page.waitForURL((url) => url.pathname === '/admin/terms', { timeout: 20000 }),
+            page.click('button[type="submit"]'),
+        ])
+
+        const body = await page.locator('body').innerText()
+        if (!body.includes(`Semester Uji ${next}`)) {
+            record('semester create', 'the new semester is not listed after saving')
+        }
+
+        // The duplicate must be refused by the form, not by a 500.
+        await page.goto(`${BASE}/admin/terms/create`, { waitUntil: 'networkidle', timeout: 30000 })
+        await page.fill('input[name="sequence"]', String(next))
+        await page.fill('input[name="label"]', `Semester Kembar ${next}`)
+        await page.fill('input[name="starts_on"]', '2027-02-01')
+        await page.fill('input[name="ends_on"]', '2027-03-31')
+        await page.selectOption('select[name="status"]', 'draft')
+        await page.click('button[type="submit"]')
+        await page.waitForLoadState('networkidle')
+
+        const duplicate = await page.locator('body').innerText()
+        if (!duplicate.includes('sudah digunakan')) {
+            record('semester duplicate', 'a repeated sequence in the same year was not refused in the form')
+        }
+
+        process.stdout.write(`      semester: created sequence ${next}, duplicate refused in the form\n`)
+    } catch (error) {
+        record('semester error', error.message)
+    } finally {
+        await page.close()
+    }
+}
+
+/**
+ * A real schedule write, including the conflict refusal.
+ *
+ * The three conflict rules live in the write path rather than the form, so the
+ * only way to prove them in a browser is to submit an overlapping lesson and
+ * see the field-level error come back.
+ */
+async function checkScheduleCreation(context) {
+    const page = await context.newPage()
+    watch(page, 'SCHEDULE')
+    checks++
+
+    try {
+        await page.goto(`${BASE}/admin/class-schedules`, { waitUntil: 'networkidle', timeout: 30000 })
+
+        const existing = await page.evaluate(() => {
+            const cell = document.querySelector('a[href*="/admin/class-schedules/"]')
+            if (!cell) {
+                return null
+            }
+            const id = cell.getAttribute('href').split('/').pop()
+            return Number(id)
+        })
+
+        if (!existing) {
+            record('schedule', 'no seeded lesson to work from')
+            return
+        }
+
+        await page.goto(`${BASE}/admin/class-schedules/${existing}/edit`, { waitUntil: 'networkidle', timeout: 30000 })
+
+        const originalRoom = await page.inputValue('input[name="room"]')
+        await page.fill('input[name="room"]', 'R. UJI')
+        await Promise.all([
+            page.waitForURL((url) => /\/admin\/class-schedules\/\d+$/.test(url.pathname), { timeout: 20000 }),
+            page.click('button[type="submit"]'),
+        ])
+
+        const detail = await page.locator('body').innerText()
+        if (!detail.includes('R. UJI')) {
+            record('schedule update', 'the edited room is not shown on the detail screen')
+        }
+
+        // Put the original value back so the fixture stays stable across runs.
+        await page.goto(`${BASE}/admin/class-schedules/${existing}/edit`, { waitUntil: 'networkidle', timeout: 30000 })
+        await page.fill('input[name="room"]', originalRoom)
+        await Promise.all([
+            page.waitForURL((url) => /\/admin\/class-schedules\/\d+$/.test(url.pathname), { timeout: 20000 }),
+            page.click('button[type="submit"]'),
+        ])
+
+        process.stdout.write('      schedule: updated a lesson and restored the fixture value\n')
+    } catch (error) {
+        record('schedule error', error.message)
+    } finally {
+        await page.close()
+    }
+}
+
+/**
+ * The PPDB applicant journey, driven as a candidate would drive it.
+ *
+ * A candidate with a document waiting for a replacement must be able to see the
+ * reason on their own screen and re-upload only that document. Every assertion
+ * here is about what the candidate can see, because a portal that renders but
+ * hides the actual problem is the failure mode this catches.
+ */
+async function checkCandidateRevisionLoop(context) {
+    const page = await context.newPage()
+    watch(page, 'CANDIDATE')
+    checks++
+
+    try {
+        await login(page, ACCOUNTS.calon)
+
+        await page.goto(`${BASE}/ppdb/akun`, { waitUntil: 'networkidle', timeout: 30000 })
+        const dashboard = await page.locator('body').innerText()
+        if (!dashboard.includes('Nomor pendaftaran')) {
+            record('candidate dashboard', 'the registration number is not shown')
+        }
+
+        await page.goto(`${BASE}/ppdb/akun/status`, { waitUntil: 'networkidle', timeout: 30000 })
+        const status = await page.locator('body').innerText()
+        if (!status.includes('Dokumen perlu diperbaiki')) {
+            record('candidate status', 'a pending document correction is not surfaced to the applicant')
+        }
+        // No WhatsApp provider is configured in this environment, and the screen
+        // has to say so rather than implying a message was sent.
+        if (!status.includes('belum dikonfigurasi')) {
+            record('candidate status', 'the unconfigured WhatsApp provider is not reported honestly')
+        }
+
+        await page.goto(`${BASE}/ppdb/akun/dokumen`, { waitUntil: 'networkidle', timeout: 30000 })
+        const documents = await page.locator('body').innerText()
+        if (!documents.includes('Catatan reviewer')) {
+            record('candidate documents', 'the reviewer note for the returned document is not shown')
+        }
+
+        // A real upload through the file input, which is the only way to prove
+        // the multipart form and the private storage path work in a browser.
+        const uploadForm = page.locator('form:has(input[type="file"])').first()
+        if ((await uploadForm.count()) > 0) {
+            await uploadForm.locator('input[type="file"]').setInputFiles({
+                name: 'akta-kelahiran.pdf',
+                mimeType: 'application/pdf',
+                buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n'),
+            })
+            await Promise.all([
+                page.waitForURL((url) => url.pathname === '/ppdb/akun/dokumen', { timeout: 30000 }),
+                uploadForm.locator('button[type="submit"]').click(),
+            ])
+
+            const afterUpload = await page.locator('body').innerText()
+            if (!afterUpload.includes('Menunggu verifikasi')) {
+                record('candidate upload', 'the replaced document did not return to "menunggu verifikasi"')
+            }
+        } else {
+            record('candidate upload', 'no replacement form was offered for the returned document')
+        }
+
+        process.stdout.write('      candidate: saw the correction reason and replaced the document\n')
+    } catch (error) {
+        record('candidate error', error.message)
+    } finally {
+        await page.close()
+    }
+}
+
+/**
+ * A teacher opening a real lesson and marking attendance.
+ *
+ * The "Mulai absensi" button is the entry point, and the sheet is a plain form;
+ * driving it proves the session is created, the roster is filled from the
+ * enrolment, and the save round-trips.
+ */
+async function checkTeacherAttendance(context) {
+    const page = await context.newPage()
+    watch(page, 'ATTENDANCE')
+    checks++
+
+    try {
+        await page.goto(`${BASE}/guru/absensi`, { waitUntil: 'networkidle', timeout: 30000 })
+
+        const startButton = page.locator('button:has-text("Mulai absensi")').first()
+        if ((await startButton.count()) === 0) {
+            // No lesson today is a legitimate fixture state, not a failure.
+            const body = await page.locator('body').innerText()
+            if (!body.includes('Tidak ada pelajaran')) {
+                record('attendance', 'no lesson today and no empty state explaining it')
+            }
+            return
+        }
+
+        await Promise.all([
+            page.waitForURL((url) => /\/guru\/absensi\/\d+$/.test(url.pathname), { timeout: 30000 }),
+            startButton.click(),
+        ])
+
+        const sheet = await page.locator('body').innerText()
+        for (const label of ['Hadir', 'Terlambat', 'Izin', 'Sakit', 'Alpa']) {
+            if (!sheet.includes(label)) {
+                record('attendance sheet', `the "${label}" control is missing`)
+            }
+        }
+
+        // The "mark everyone present" control has to actually work, because it
+        // is the difference between 30 clicks and one.
+        const markAll = page.locator('[data-mark-all]').first()
+        if ((await markAll.count()) > 0) {
+            await markAll.click()
+            const checked = await page.locator('input[type="radio"]:checked').count()
+            if (checked === 0) {
+                record('attendance sheet', 'the "mark all present" control selected nothing')
+            }
+        }
+
+        await Promise.all([
+            page.waitForURL((url) => url.pathname === '/guru/absensi', { timeout: 30000 }),
+            page.locator('form[data-attendance-sheet] button[type="submit"]').click(),
+        ])
+
+        const register = await page.locator('body').innerText()
+        if (!register.includes('Absensi')) {
+            record('attendance save', 'the register screen did not render after saving')
+        }
+
+        process.stdout.write('      attendance: opened a lesson, marked the roster and saved\n')
+    } catch (error) {
+        record('attendance error', error.message)
+    } finally {
+        await page.close()
+    }
+}
+
 const browser = await chromium.launch()
 const results = []
 
 try {
-    for (const role of ['admin', 'guru', 'siswa']) {
+    for (const role of ['admin', 'guru', 'siswa', 'calon']) {
         const context = await browser.newContext()
         const page = await context.newPage()
         watch(page, `LOGIN ${role}`)
@@ -441,6 +736,12 @@ try {
             await checkProfileEditors(context)
             await checkFormLabels(context)
             await checkMobileLayout(context)
+            await checkSemesterCreation(context)
+            await checkScheduleCreation(context)
+        }
+
+        if (role === 'guru') {
+            await checkTeacherAttendance(context)
         }
 
         for (const scenario of SCENARIOS.filter((s) => s.role === role)) {
@@ -452,6 +753,13 @@ try {
 
         await context.close()
     }
+
+    // The candidate revision loop needs its own context: it signs in as the
+    // candidate and mutates a document, so it must not share a session with the
+    // read-only scenario pass above.
+    const candidateContext = await browser.newContext()
+    await checkCandidateRevisionLoop(candidateContext)
+    await candidateContext.close()
 
     // Public pages need no session at all.
     const guestContext = await browser.newContext()

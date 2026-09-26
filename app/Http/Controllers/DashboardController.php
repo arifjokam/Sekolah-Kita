@@ -31,6 +31,7 @@ class DashboardController extends Controller
         return redirect()->route(match (true) {
             $user->isAdministrator() => 'dashboard.administrator',
             $user->isGuru() => 'dashboard.guru',
+            $user->isCalon() => 'dashboard.ppdb',
             default => 'dashboard.siswa',
         });
     }
@@ -44,6 +45,7 @@ class DashboardController extends Controller
             $user->isAdministrator() => view('dashboard.administrator', $dashboard->forAdministrator($user)),
             $user->isGuru() => view('dashboard.guru', $dashboard->forTeacher($user)),
             $user->isSiswa() => view('dashboard.siswa', $dashboard->forStudent($user)),
+            $user->isCalon() => view('dashboard.ppdb', $dashboard->forApplicant($user)),
             default => view('dashboard.unavailable'),
         };
     }

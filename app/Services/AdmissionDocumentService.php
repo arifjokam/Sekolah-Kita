@@ -12,6 +12,7 @@ use App\Enums\MediaScanStatus;
 use App\Enums\MediaVisibility;
 use App\Jobs\ProcessAdmissionDocument;
 use App\Models\AdmissionApplication;
+use App\Models\AdmissionReview;
 use App\Models\ApplicationDocument;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -35,6 +36,18 @@ class AdmissionDocumentService
         UploadedFile $file,
         AdmissionDocumentType $type,
     ): ApplicationDocument {
+        Gate::forUser($actor)->authorize('review', $application);
+
+        if (! in_array($application->status, [
+            AdmissionApplicationStatus::Submitted,
+            AdmissionApplicationStatus::UnderReview,
+            AdmissionApplicationStatus::RevisionRequested,
+        ], true)) {
+            throw ValidationException::withMessages([
+                'document' => 'Dokumen hanya dapat ditambahkan selama pengajuan ditinjau.',
+            ]);
+        }
+
         return $this->store($actor, $application, $file, $type);
     }
 
@@ -57,6 +70,49 @@ class AdmissionDocumentService
         return $this->store(null, $application, $file, $type);
     }
 
+    /**
+     * Upload a document on behalf of a signed-in applicant portal account.
+     *
+     * No access token is involved: authorisation is the policy check on the
+     * owning application, which the caller performs before reaching this method.
+     *
+     * A new version is only accepted when the previous one left the applicant
+     * with something to do: no file at all, a file nobody has reviewed yet, or a
+     * file the reviewer explicitly sent back. Once a document has been accepted
+     * or finally rejected it is frozen, so an applicant cannot swap a reviewed
+     * file after the fact.
+     */
+    public function uploadForPortal(
+        AdmissionApplication $application,
+        UploadedFile $file,
+        AdmissionDocumentType $type,
+    ): ApplicationDocument {
+        /*
+         * Authorisation is repeated here, not only in the calling FormRequest.
+         * The request has to run its check before the controller exists, which
+         * makes it easy for a future caller to reach this method without one; the
+         * policy call is the thing that actually guarantees a candidate can only
+         * ever touch their own application.
+         */
+        $applicant = $application->applicantUser;
+
+        if (! $applicant instanceof User) {
+            throw ValidationException::withMessages([
+                'document' => 'Pengajuan ini tidak tertaut ke akun pendaftar.',
+            ]);
+        }
+
+        Gate::forUser($applicant)->authorize('viewOwn', $application);
+
+        if (! $application->canAcceptDocument()) {
+            throw ValidationException::withMessages([
+                'document' => 'Unggah dokumen hanya tersedia saat pengajuan masih disusun atau menunggu perbaikan.',
+            ]);
+        }
+
+        return $this->store($applicant, $application, $file, $type, enforceReplaceable: true);
+    }
+
     public function verify(User $actor, ApplicationDocument $document): ApplicationDocument
     {
         return DB::transaction(function () use ($actor, $document): ApplicationDocument {
@@ -72,6 +128,17 @@ class AdmissionDocumentService
                 'reviewed_at' => now(),
                 'reviewer_note' => null,
             ])->save();
+
+            AdmissionReview::query()->create([
+                'admission_application_id' => (int) $locked->admission_application_id,
+                'application_document_id' => $locked->getKey(),
+                'reviewer_user_id' => $actor->getKey(),
+                'event_type' => 'document_verified',
+                'decision' => null,
+                'internal_note' => null,
+                'reviewed_at' => now(),
+            ]);
+
             $this->audit->recordOrFail($actor, 'admission_document.verified', 'application_document', $locked->getKey(), context: ['document_type' => $locked->document_type->value]);
 
             return $locked->refresh();
@@ -92,15 +159,80 @@ class AdmissionDocumentService
                 'reviewed_at' => now(),
                 'reviewer_note' => $reason,
             ])->save();
+
+            AdmissionReview::query()->create([
+                'admission_application_id' => (int) $locked->admission_application_id,
+                'application_document_id' => $locked->getKey(),
+                'reviewer_user_id' => $actor->getKey(),
+                'event_type' => 'document_rejected',
+                'decision' => null,
+                'internal_note' => $reason,
+                'reviewed_at' => now(),
+            ]);
+
             $this->audit->recordOrFail($actor, 'admission_document.rejected', 'application_document', $locked->getKey(), context: ['document_type' => $locked->document_type->value]);
 
             return $locked->refresh();
         }, attempts: 3);
     }
 
-    public function download(User $actor, ApplicationDocument $document): StreamedResponse
+    /**
+     * Send a document back for a replacement, with a reason the applicant reads.
+     *
+     * This is the state that makes the revision loop a one-document fix instead
+     * of a whole-application restart: only this document is replaceable, and only
+     * the category it belongs to.
+     */
+    public function requestRevision(
+        User $actor,
+        ApplicationDocument $document,
+        ?string $note = null,
+    ): ApplicationDocument {
+        if ($note === null || trim($note) === '') {
+            throw ValidationException::withMessages([
+                'reviewer_note' => 'Alasan perbaikan wajib diisi agar pemohon tahu apa yang harus diunggah ulang.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($actor, $document, $note): ApplicationDocument {
+            $locked = ApplicationDocument::query()->whereKey($document->getKey())->lockForUpdate()->firstOrFail();
+            Gate::forUser($actor)->authorize('requestRevision', $locked);
+            $this->assertDocumentIsPending($locked);
+            $this->assertApplicationIsReviewable($locked);
+
+            $locked->forceFill([
+                'verification_status' => AdmissionDocumentVerificationStatus::NeedsRevision,
+                'reviewed_by_user_id' => $actor->getKey(),
+                'reviewed_at' => now(),
+                'reviewer_note' => trim($note),
+            ])->save();
+
+            AdmissionReview::query()->create([
+                'admission_application_id' => (int) $locked->admission_application_id,
+                'application_document_id' => $locked->getKey(),
+                'reviewer_user_id' => $actor->getKey(),
+                'event_type' => 'document_revision_requested',
+                'decision' => null,
+                'internal_note' => trim($note),
+                'reviewed_at' => now(),
+            ]);
+
+            $this->audit->recordOrFail($actor, 'admission_document.revision_requested', 'application_document', $locked->getKey(), context: ['document_type' => $locked->document_type->value]);
+
+            return $locked->refresh();
+        }, attempts: 3);
+    }
+
+    /**
+     * Download a document the requesting account is entitled to.
+     *
+     * Shared by the reviewer route and the applicant portal route; which policy
+     * ability gates it is the caller's decision, so a candidate can only ever
+     * reach a document belonging to their own application.
+     */
+    public function download(User $actor, ApplicationDocument $document, string $ability = 'downloadPrivate'): StreamedResponse
     {
-        Gate::forUser($actor)->authorize('downloadPrivate', $document);
+        Gate::forUser($actor)->authorize($ability, $document);
         $media = $document->mediaAsset;
 
         if ($media === null
@@ -128,28 +260,51 @@ class AdmissionDocumentService
         );
     }
 
-    private function store(?User $actor, AdmissionApplication $application, UploadedFile $file, AdmissionDocumentType $type): ApplicationDocument
+    /**
+     * Persist a new version of one document category.
+     *
+     * Authorisation and the "may a new version exist at all?" rule are decided by
+     * the caller, because they differ per entry point: a reviewer may add a
+     * document while an application is under review, a token holder may only add
+     * one inside an open revision window, and a signed-in applicant may add or
+     * replace while the application is a draft or awaiting a requested revision.
+     * What is left here is identical in all three cases, so it lives in one place
+     * and cannot drift between them.
+     */
+    private function store(?User $actor, AdmissionApplication $application, UploadedFile $file, AdmissionDocumentType $type, bool $enforceReplaceable = false): ApplicationDocument
     {
         $media = $this->documents->store($file, $actor);
 
         try {
-            $document = DB::transaction(function () use ($actor, $application, $media, $type): ApplicationDocument {
+            $document = DB::transaction(function () use ($actor, $application, $media, $type, $enforceReplaceable): ApplicationDocument {
                 $lockedApplication = AdmissionApplication::query()
                     ->whereKey($application->getKey())
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if ($actor !== null) {
-                    Gate::forUser($actor)->authorize('review', $lockedApplication);
-                    if (! in_array($lockedApplication->status, [
-                        AdmissionApplicationStatus::Submitted,
-                        AdmissionApplicationStatus::UnderReview,
-                        AdmissionApplicationStatus::RevisionRequested,
-                    ], true)) {
-                        throw ValidationException::withMessages(['document' => 'Documents can only be added while an application is under review.']);
+                /*
+                 * "May a new version exist at all?" is decided on the locked
+                 * application, not on the caller's earlier read. Deciding it
+                 * outside meant two concurrent uploads of the same category both
+                 * passed, and the second silently superseded the first — so the
+                 * reviewer would end up looking at a file the applicant never
+                 * meant to send.
+                 */
+                if ($enforceReplaceable) {
+                    $previous = $lockedApplication->documents()
+                        ->where('document_type', $type->value)
+                        ->orderByDesc('version')
+                        ->first();
+
+                    $replaceable = $previous === null
+                        || $previous->verification_status === AdmissionDocumentVerificationStatus::Pending
+                        || $previous->verification_status === AdmissionDocumentVerificationStatus::NeedsRevision;
+
+                    if (! $replaceable) {
+                        throw ValidationException::withMessages([
+                            'document' => 'Dokumen ini sudah ditinjau. Hubungi administrator bila perlu diperbarui.',
+                        ]);
                     }
-                } elseif (! $lockedApplication->canRevise()) {
-                    throw ValidationException::withMessages(['document' => 'Document upload is only available when a revision is requested before the deadline.']);
                 }
 
                 $version = ((int) $lockedApplication->documents()

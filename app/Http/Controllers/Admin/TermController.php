@@ -16,6 +16,14 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
+/**
+ * Semesters inside an academic year.
+ *
+ * The class, the table and the route names stay `Term`: a term is the existing
+ * domain concept, and renaming it would mean a schema migration and a
+ * re-authorisation pass for no user benefit. Only the display copy says
+ * "Semester", because that is what a school says.
+ */
 class TermController extends Controller
 {
     public function index(Request $request, AcademicAdministrationService $academic): View
@@ -36,14 +44,18 @@ class TermController extends Controller
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
         Gate::authorize('create', Term::class);
+
+        $academicYearId = $request->integer('academic_year_id')
+            ?: (int) (AcademicYear::getCurrent()?->getKey() ?? 0);
 
         return view('admin.terms.form', [
             'term' => null,
             'statuses' => TermStatus::cases(),
             'academicYears' => $this->academicYears(),
+            ...$this->formDefaults($academicYearId),
         ]);
     }
 
@@ -53,7 +65,7 @@ class TermController extends Controller
 
         return redirect()
             ->route('admin.terms.index')
-            ->with('status', 'Term berhasil disimpan.');
+            ->with('status', 'Semester berhasil disimpan.');
     }
 
     public function show(Term $term): View
@@ -66,6 +78,11 @@ class TermController extends Controller
         return view('admin.terms.show', [
             'term' => $term,
             'statuses' => TermStatus::cases(),
+            'siblings' => Term::query()
+                ->where('academic_year_id', $term->academic_year_id)
+                ->whereKeyNot($term->getKey())
+                ->orderBy('sequence')
+                ->get(),
         ]);
     }
 
@@ -77,6 +94,7 @@ class TermController extends Controller
             'term' => $term,
             'statuses' => TermStatus::cases(),
             'academicYears' => $this->academicYears(),
+            ...$this->formDefaults((int) $term->academic_year_id),
         ]);
     }
 
@@ -89,7 +107,7 @@ class TermController extends Controller
 
         return redirect()
             ->route('admin.terms.index')
-            ->with('status', 'Term berhasil diperbarui.');
+            ->with('status', 'Semester berhasil diperbarui.');
     }
 
     public function updateStatus(
@@ -99,7 +117,7 @@ class TermController extends Controller
     ): RedirectResponse {
         $academic->changeTermStatus($request->user(), $term, TermStatus::from($request->string('status')->toString()));
 
-        return back()->with('status', 'Status term diperbarui.');
+        return back()->with('status', 'Status semester diperbarui.');
     }
 
     /**
@@ -107,6 +125,42 @@ class TermController extends Controller
      */
     private function academicYears()
     {
-        return AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'code', 'label', 'status']);
+        return AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'code', 'label', 'status', 'starts_on', 'ends_on']);
+    }
+
+    /**
+     * Pre-fill the create/edit form with the next free semester number and a
+     * date range that continues the previous semester rather than defaulting to
+     * the whole calendar year — which used to produce a range that always
+     * overlapped the sibling semester and was rejected on save.
+     *
+     * @return array{nextSequence: int, suggestedStart: string, suggestedEnd: string}
+     */
+    private function formDefaults(int $academicYearId): array
+    {
+        $siblings = $academicYearId > 0
+            ? Term::query()->where('academic_year_id', $academicYearId)->orderBy('sequence')->get()
+            : new Collection;
+
+        $nextSequence = ((int) $siblings->max('sequence')) + 1;
+        $previous = $siblings->sortByDesc('sequence')->first();
+        $year = $academicYearId > 0 ? AcademicYear::query()->find($academicYearId) : null;
+
+        $suggestedStart = $previous instanceof Term
+            ? $previous->ends_on->copy()->addDay()->toDateString()
+            : ($year?->starts_on?->toDateString() ?? today()->toDateString());
+
+        $suggestedEnd = $previous instanceof Term
+            ? min(
+                $previous->ends_on->copy()->addMonths(6)->toDateString(),
+                $year?->ends_on?->toDateString() ?? '9999-12-31',
+            )
+            : ($year?->starts_on?->copy()->addMonths(6)->toDateString() ?? today()->addMonths(6)->toDateString());
+
+        return [
+            'nextSequence' => max(1, $nextSequence),
+            'suggestedStart' => $suggestedStart,
+            'suggestedEnd' => $suggestedEnd,
+        ];
     }
 }

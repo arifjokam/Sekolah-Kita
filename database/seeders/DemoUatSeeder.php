@@ -6,22 +6,35 @@ use App\Enums\AcademicYearStatus;
 use App\Enums\AdmissionActorType;
 use App\Enums\AdmissionApplicationStatus;
 use App\Enums\AdmissionConversionStatus;
+use App\Enums\AdmissionDocumentType;
+use App\Enums\AdmissionDocumentVerificationStatus;
 use App\Enums\AdmissionPeriodStatus;
 use App\Enums\AssignmentStatus;
+use App\Enums\AttendanceSessionStatus;
+use App\Enums\AttendanceStatus;
 use App\Enums\ClassStatus;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianLifecycleStatus;
 use App\Enums\GuardianRelationshipType;
 use App\Enums\PublicationStatus;
+use App\Enums\ScheduleStatus;
 use App\Enums\StudentLifecycleStatus;
 use App\Enums\TeacherEmploymentStatus;
 use App\Enums\TermStatus;
+use App\Enums\WeekDay;
 use App\Models\AcademicYear;
 use App\Models\AdmissionApplication;
 use App\Models\AdmissionPeriod;
+use App\Models\ApplicationDocument;
+use App\Models\ApplicationStatusHistory;
+use App\Models\AttendanceRecord;
+use App\Models\AttendanceSession;
 use App\Models\ClassModel;
+use App\Models\ClassSchedule;
 use App\Models\ClassTeacherAssignment;
+use App\Models\Enrollment;
 use App\Models\Guardian;
+use App\Models\MediaAsset;
 use App\Models\NewsArticle;
 use App\Models\Student;
 use App\Models\StudentGuardian;
@@ -31,6 +44,7 @@ use App\Models\TeachingAssignment;
 use App\Models\Term;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -56,7 +70,9 @@ class DemoUatSeeder extends Seeder
         $students = $this->students();
         $this->guardians($students);
         $this->enrollments($students, $classes, $activeYear);
-        $this->assignments($teachers, $classes, $subjects, $activeYear, $terms);
+        $assignments = $this->assignments($teachers, $classes, $subjects, $activeYear, $terms);
+        $this->schedules($assignments, $terms);
+        $this->attendance($assignments, $terms);
         $this->admission($activeYear, $classes);
         $this->content();
     }
@@ -232,6 +248,10 @@ class DemoUatSeeder extends Seeder
             ['legal_name' => 'Andi Pratama', 'student_number' => 'NIS-DEV-0002', 'email' => 'andi.pratama@sekolah.local'],
             ['legal_name' => 'Bela Lestari', 'student_number' => 'NIS-DEV-0003', 'email' => 'bela.lestari@sekolah.local'],
             ['legal_name' => 'Candra Wijaya', 'student_number' => 'NIS-DEV-0004', 'email' => 'candra.wijaya@sekolah.local'],
+            ['legal_name' => 'Dewi Anggraini', 'student_number' => 'NIS-DEV-0005', 'email' => 'dewi.anggraini@sekolah.local'],
+            ['legal_name' => 'Eko Prasetyo', 'student_number' => 'NIS-DEV-0006', 'email' => 'eko.prasetyo@sekolah.local'],
+            ['legal_name' => 'Fitri Handayani', 'student_number' => 'NIS-DEV-0007', 'email' => 'fitri.handayani@sekolah.local'],
+            ['legal_name' => 'Galih Ramadhan', 'student_number' => 'NIS-DEV-0008', 'email' => 'galih.ramadhan@sekolah.local'],
         ];
 
         $students = [];
@@ -343,16 +363,18 @@ class DemoUatSeeder extends Seeder
      * @param  array<int, ClassModel>  $classes
      * @param  array<int, Subject>  $subjects
      * @param  array<int, Term>  $terms
+     * @return Collection<int, TeachingAssignment>
      */
-    private function assignments(array $teachers, array $classes, array $subjects, AcademicYear $year, array $terms): void
+    private function assignments(array $teachers, array $classes, array $subjects, AcademicYear $year, array $terms): Collection
     {
         $start = now()->subMonths(5)->toDateString();
+        $created = new Collection;
 
         foreach ($teachers as $index => $teacher) {
             foreach ($subjects as $offset => $subject) {
                 $class = $classes[($index + $offset) % count($classes)];
 
-                TeachingAssignment::query()->firstOrCreate([
+                $created[] = TeachingAssignment::firstOrCreate([
                     'teacher_id' => $teacher->getKey(),
                     'class_id' => $class->getKey(),
                     'subject_id' => $subject->getKey(),
@@ -372,7 +394,7 @@ class DemoUatSeeder extends Seeder
         foreach ($classes as $index => $class) {
             $teacher = $teachers[$index % count($teachers)];
 
-            ClassTeacherAssignment::query()->firstOrCreate([
+            ClassTeacherAssignment::firstOrCreate([
                 'class_id' => $class->getKey(),
                 'teacher_id' => $teacher->getKey(),
             ], [
@@ -381,6 +403,206 @@ class DemoUatSeeder extends Seeder
                 'ends_on' => null,
                 'internal_reason' => null,
             ]);
+        }
+
+        return $created;
+    }
+
+    /**
+     * A real weekly timetable built from the assignment rows.
+     *
+     * Two properties matter here, and both are enforced by allocation rather than
+     * by luck:
+     *
+     *  1. every lesson has a teacher who is actually assigned to teach that
+     *     subject in that class in that semester — the same integrity rule the
+     *     schedule form enforces; and
+     *  2. no class and no teacher is ever double booked, which is the same
+     *     conflict rule the write path enforces.
+     *
+     * The earlier version derived both the day and the hour band from one running
+     * counter, so the (day, band) pair repeated every six lessons and any class
+     * with more than six assignments silently ended up with two lessons in the
+     * same slot. Slots are now allocated against an explicit "already taken"
+     * index for the class and for the teacher, so a conflict is unrepresentable.
+     *
+     * Monday through Saturday, because the school week this deployment allows is
+     * six days and a weekday-only fixture would leave the register untestable on
+     * the one day a reviewer is most likely to run the demo.
+     *
+     * @param  Collection<int, TeachingAssignment>  $assignments
+     * @param  array<int, Term>  $terms
+     */
+    private function schedules(Collection $assignments, array $terms): void
+    {
+        $term = $terms[0] ?? null;
+
+        if (! $term instanceof Term || $assignments === []) {
+            return;
+        }
+
+        $teachingDays = [
+            WeekDay::Monday,
+            WeekDay::Tuesday,
+            WeekDay::Wednesday,
+            WeekDay::Thursday,
+            WeekDay::Friday,
+            WeekDay::Saturday,
+        ];
+
+        // A lesson is 40 minutes and starts on the hour from 07:00, so band N
+        // always ends before band N+1 begins. Two lessons in different bands
+        // therefore cannot overlap, which is what makes "different band" a safe
+        // stand-in for "different time".
+        $firstHour = 7;
+        $bands = (int) config('sekolah-kita.schedule.max_lessons_per_day', 12);
+        $bands = max(1, min($bands, count($teachingDays)));
+
+        /** @var array<string, array<int, true>> $taken */
+        $taken = [];
+
+        $isTaken = static function (string $dimension, int $day, int $band) use (&$taken): bool {
+            return isset($taken[$dimension][$day][$band]);
+        };
+
+        $claim = static function (string $dimension, int $day, int $band) use (&$taken): void {
+            $taken[$dimension][$day][$band] = true;
+        };
+
+        foreach ($assignments->groupBy('class_id') as $classId => $classAssignments) {
+            foreach ($classAssignments as $assignment) {
+                $chosen = null;
+
+                // Bands first, then days: a class gets a full day before it gets a
+                // second lesson on the same day, which reads like a real timetable
+                // instead of a scattered one.
+                for ($band = 0; $band < $bands && $chosen === null; $band++) {
+                    for ($dayIndex = 0; $dayIndex < count($teachingDays); $dayIndex++) {
+                        $classKey = 'class:'.$classId;
+                        $teacherKey = 'teacher:'.$assignment->teacher_id;
+
+                        if ($isTaken($classKey, $dayIndex, $band) || $isTaken($teacherKey, $dayIndex, $band)) {
+                            continue;
+                        }
+
+                        $chosen = [$dayIndex, $band];
+                        $claim($classKey, $dayIndex, $band);
+                        $claim($teacherKey, $dayIndex, $band);
+
+                        break;
+                    }
+                }
+
+                if ($chosen === null) {
+                    // More assignments than the week can hold. Skipping is honest;
+                    // writing a clashing lesson would quietly teach a wrong
+                    // timetable to whoever demos this.
+                    continue;
+                }
+
+                [$dayIndex, $band] = $chosen;
+                $startsAt = sprintf('%02d:00', $firstHour + $band);
+                $endsAt = sprintf('%02d:40', $firstHour + $band);
+
+                ClassSchedule::firstOrCreate([
+                    'class_id' => $assignment->class_id,
+                    'subject_id' => $assignment->subject_id,
+                    'teacher_id' => $assignment->teacher_id,
+                    'term_id' => $term->getKey(),
+                    'day_of_week' => $teachingDays[$dayIndex]->value,
+                    'starts_at' => $startsAt,
+                ], [
+                    'academic_year_id' => $assignment->academic_year_id,
+                    'ends_at' => $endsAt,
+                    'room' => 'R. '.($assignment->class?->grade_level ?? 7).(string) ($assignment->class?->name ?? 'A'),
+                    'status' => ScheduleStatus::Active,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Sample attendance for the current month, so the teacher register, the
+     * monthly report and the student summary all have something real to render.
+     *
+     * Only sessions for lessons whose date matches the lesson's weekday are
+     * created, because opening a session for the wrong day is refused by the
+     * service — the fixture has to obey the same rule as the application.
+     *
+     * @param  Collection<int, TeachingAssignment>  $assignments
+     * @param  array<int, Term>  $terms
+     */
+    private function attendance(Collection $assignments, array $terms): void
+    {
+        $term = $terms[0] ?? null;
+
+        if (! $term instanceof Term) {
+            return;
+        }
+
+        $monthStart = now()->startOfMonth();
+        $patterns = [
+            [AttendanceStatus::Present, AttendanceStatus::Present, AttendanceStatus::Present, AttendanceStatus::Late],
+            [AttendanceStatus::Present, AttendanceStatus::Sick, AttendanceStatus::Present, AttendanceStatus::Present],
+            [AttendanceStatus::Present, AttendanceStatus::Excused, AttendanceStatus::Absent, AttendanceStatus::Present],
+        ];
+
+        $scheduleIndex = 0;
+
+        foreach (ClassSchedule::query()->orderBy('id')->limit(6)->get() as $schedule) {
+            $day = $schedule->day_of_week;
+
+            // Up to three occurrences of this weekday inside the current month.
+            $dates = [];
+            for ($dayCursor = $monthStart->copy(); $dayCursor->month === $monthStart->month; $dayCursor->addDay()) {
+                if ($dayCursor->dayOfWeekIso === $day->value) {
+                    $dates[] = $dayCursor->copy();
+                }
+            }
+
+            $pattern = $patterns[$scheduleIndex % count($patterns)];
+
+            foreach (array_slice($dates, 0, 3) as $occurrence => $date) {
+                $session = AttendanceSession::firstOrCreate([
+                    'schedule_id' => $schedule->getKey(),
+                    'session_date' => $date->toDateString(),
+                ], [
+                    'academic_year_id' => $schedule->academic_year_id,
+                    'term_id' => $schedule->term_id,
+                    'class_id' => $schedule->class_id,
+                    'subject_id' => $schedule->subject_id,
+                    'teacher_id' => $schedule->teacher_id,
+                    'starts_at' => substr((string) $schedule->starts_at, 0, 5),
+                    'ends_at' => substr((string) $schedule->ends_at, 0, 5),
+                    'status' => AttendanceSessionStatus::Submitted,
+                    'submitted_at' => $date->copy()->setTime(9, 0),
+                    'marked_by_user_id' => $schedule->teacher?->user_id,
+                    'note' => null,
+                ]);
+
+                $enrollments = Enrollment::query()
+                    ->where('class_id', $schedule->class_id)
+                    ->where('status', EnrollmentStatus::Active->value)
+                    ->orderBy('student_id')
+                    ->get();
+
+                foreach ($enrollments as $index => $enrollment) {
+                    $status = $pattern[($index + $occurrence) % count($pattern)];
+
+                    AttendanceRecord::firstOrCreate([
+                        'attendance_session_id' => $session->getKey(),
+                        'student_id' => $enrollment->student_id,
+                    ], [
+                        'status' => $status,
+                        'note' => $status->requiresNote() ? 'Keterangan dari wali kelas' : null,
+                        'marked_by_user_id' => $session->marked_by_user_id,
+                        'marked_at' => $session->submitted_at,
+                        'revision' => 0,
+                    ]);
+                }
+            }
+
+            $scheduleIndex++;
         }
     }
 
@@ -504,6 +726,190 @@ class DemoUatSeeder extends Seeder
                 // derive the next version from the application row, so the two
                 // have to agree.
                 $application->forceFill(['workflow_version' => $version])->save();
+            }
+        }
+
+        $this->portalApplicants($period, $reviewerId);
+    }
+
+    /**
+     * PPDB applicant portal fixtures.
+     *
+     * Two candidates, each with a real portal account so the whole applicant
+     * journey can be walked in a browser: one complete and submitted, and one
+     * whose document has been sent back for a replacement, so the revision loop
+     * has a case to exercise.
+     *
+     * Documents are stored as media metadata only — no real file is written, and
+     * every document is a private, quarantined asset exactly like a real upload
+     * that has not been scanned yet.
+     */
+    private function portalApplicants(AdmissionPeriod $period, ?int $reviewerId): void
+    {
+        $definitions = [
+            [
+                'email' => 'calon.lengkap@sekolah.local',
+                'name' => 'Rangga Wicaksana',
+                'phone' => '0811-3000-0001',
+                'status' => AdmissionApplicationStatus::Submitted,
+                'needs_revision' => false,
+            ],
+            [
+                'email' => 'calon.perbaikan@sekolah.local',
+                'name' => 'Sekar Arum',
+                'phone' => '0811-3000-0002',
+                'status' => AdmissionApplicationStatus::UnderReview,
+                'needs_revision' => true,
+            ],
+        ];
+
+        foreach ($definitions as $index => $definition) {
+            $user = User::query()->where('email', $definition['email'])->first();
+
+            if (! $user instanceof User) {
+                continue;
+            }
+
+            $applicant = [
+                'applicant_name' => $definition['name'],
+                'national_id' => '327301450190000'.$index,
+                'nisn' => '123456789'.$index,
+                'birth_place' => 'Bandung',
+                'birth_date' => now()->subYears(13)->toDateString(),
+                'gender' => $index === 0 ? 'L' : 'P',
+                'address' => 'Jl. Contoh No. '.($index + 10),
+                'address_rt' => '00'.($index + 1),
+                'address_rw' => '00'.($index + 2),
+                'village' => 'Cibunar',
+                'district' => 'Sukajadi',
+                'regency' => 'Bandung',
+                'province' => 'Jawa Barat',
+                'postal_code' => '40131',
+                'contact_email' => $definition['email'],
+                'contact_phone' => $definition['phone'],
+                'contact_whatsapp' => $definition['phone'],
+                'current_school' => 'SDN Contoh '.($index + 1),
+                'graduation_year' => (int) now()->year,
+                'requested_grade_level' => 7,
+            ];
+
+            $submittedAt = now()->subDays(5 - $index);
+            $registrationNumber = 'PPDB-PORTAL-'.now()->format('Y').'-000'.($index + 1);
+
+            // Written through the same shape the portal service writes, so a
+            // fixture row and a real row are indistinguishable: registration
+            // number, source, workflow version and the duplicate fingerprint are
+            // not mass assignable, exactly as on the live path.
+            $application = AdmissionApplication::firstOrNew(['registration_number' => $registrationNumber]);
+            $application->fill($applicant);
+            $application->forceFill([
+                'admission_period_id' => $period->getKey(),
+                'applicant_user_id' => $user->getKey(),
+                'source' => 'ppdb_portal',
+                'status' => $definition['status'],
+                'conversion_status' => AdmissionConversionStatus::NotStarted,
+                'workflow_version' => $definition['status'] === AdmissionApplicationStatus::UnderReview ? 2 : 1,
+                'duplicate_fingerprint' => $this->fingerprint($applicant),
+                'duplicate_flag' => false,
+                'assigned_reviewer_user_id' => $reviewerId,
+                'submitted_at' => $submittedAt,
+                'locked_at' => $submittedAt,
+                'consent_version' => (string) config('sekolah-kita.ppdb.consent_version'),
+                'consent_accepted_at' => $submittedAt,
+                'contact_verified_at' => $submittedAt,
+            ]);
+            $application->save();
+
+            if ($application->guardians()->exists()) {
+                continue;
+            }
+
+            $application->guardians()->create([
+                'legal_name' => $definition['name'].' Ayah',
+                'national_id' => '327301120180000'.$index,
+                'relationship_type' => GuardianRelationshipType::Father,
+                'phone' => $definition['phone'],
+                'whatsapp_number' => $definition['phone'],
+                'occupation' => 'Wiraswasta',
+                'address' => $applicant['address'],
+                'is_primary_contact' => true,
+                'is_emergency_contact' => true,
+                'priority_order' => 1,
+            ]);
+
+            foreach (AdmissionDocumentType::required() as $documentIndex => $type) {
+                $needsRevision = $definition['needs_revision'] && $type === AdmissionDocumentType::GuardianIdentity;
+
+                $media = MediaAsset::firstOrCreate([
+                    'private_object_key' => 'admission-documents/'.hash('sha256', $application->registration_number.$type->value).'.pdf',
+                ], [
+                    'uploader_user_id' => $user->getKey(),
+                    'media_kind' => 'document',
+                    'original_filename' => $type->value.'.pdf',
+                    'private_disk' => 'local',
+                    'public_disk' => null,
+                    'public_object_key' => null,
+                    'mime_type' => 'application/pdf',
+                    'size_bytes' => 1024,
+                    'checksum_sha256' => hash('sha256', $application->registration_number.$type->value),
+                    'processing_status' => 'ready',
+                    'scan_status' => 'clean',
+                    'scanned_at' => $submittedAt,
+                    'scan_error_code' => null,
+                    'visibility' => 'private',
+                ]);
+
+                $document = ApplicationDocument::firstOrCreate([
+                    'admission_application_id' => $application->getKey(),
+                    'document_type' => $type,
+                    'version' => 1,
+                ], [
+                    'media_asset_id' => $media->getKey(),
+                    'verification_status' => $needsRevision
+                        ? AdmissionDocumentVerificationStatus::NeedsRevision
+                        : AdmissionDocumentVerificationStatus::Verified,
+                    'reviewed_by_user_id' => $reviewerId,
+                    'reviewed_at' => $submittedAt->copy()->addHours(6),
+                    'reviewer_note' => $needsRevision ? 'Dokumen tidak terbaca. Silakan unggah ulang dengan foto lebih terang.' : null,
+                ]);
+
+                if ($needsRevision) {
+                    continue;
+                }
+
+                unset($documentIndex, $document);
+            }
+
+            ApplicationStatusHistory::firstOrCreate([
+                'admission_application_id' => $application->getKey(),
+                'workflow_version' => 1,
+            ], [
+                'from_status' => AdmissionApplicationStatus::Draft,
+                'to_status' => AdmissionApplicationStatus::Submitted,
+                'actor_type' => AdmissionActorType::Applicant,
+                'actor_user_id' => $user->getKey(),
+                'reason_code' => 'ppdb_portal_submitted',
+                'public_message' => 'Pengajuan Anda lengkap dan sudah dikirim untuk ditinjau.',
+                'correlation_id' => (string) Str::uuid(),
+                'occurred_at' => $submittedAt,
+            ]);
+
+            if ($definition['status'] === AdmissionApplicationStatus::UnderReview) {
+                ApplicationStatusHistory::firstOrCreate([
+                    'admission_application_id' => $application->getKey(),
+                    'workflow_version' => 2,
+                ], [
+                    'from_status' => AdmissionApplicationStatus::Submitted,
+                    'to_status' => AdmissionApplicationStatus::UnderReview,
+                    'actor_type' => AdmissionActorType::Staff,
+                    'actor_user_id' => $reviewerId,
+                    'reason_code' => 'review_started',
+                    'public_message' => 'Pengajuan Anda sedang ditinjau oleh tim sekolah.',
+                    'correlation_id' => (string) Str::uuid(),
+                    'occurred_at' => $submittedAt->copy()->addHours(6),
+                ]);
+
+                $application->forceFill(['workflow_version' => 2])->save();
             }
         }
     }

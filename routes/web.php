@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AdmissionApplicationController as AdminAdmissionA
 use App\Http\Controllers\Admin\AdmissionDocumentController as AdminAdmissionDocumentController;
 use App\Http\Controllers\Admin\AdmissionPeriodController as AdminAdmissionPeriodController;
 use App\Http\Controllers\Admin\ClassController as AdminClassController;
+use App\Http\Controllers\Admin\ClassScheduleController as AdminClassScheduleController;
 use App\Http\Controllers\Admin\ClassTeacherAssignmentController as AdminClassTeacherAssignmentController;
 use App\Http\Controllers\Admin\ContactMessageController as AdminContactMessageController;
 use App\Http\Controllers\Admin\EnrollmentController as AdminEnrollmentController;
@@ -30,6 +31,11 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Ppdb\ApplicantBiodataController;
+use App\Http\Controllers\Ppdb\ApplicantDocumentController;
+use App\Http\Controllers\Ppdb\ApplicantGuardianController;
+use App\Http\Controllers\Ppdb\ApplicantPortalController;
+use App\Http\Controllers\Ppdb\RegisteredApplicantController;
 use App\Http\Controllers\Public\AchievementController;
 use App\Http\Controllers\Public\AdmissionController;
 use App\Http\Controllers\Public\ContactController;
@@ -38,6 +44,12 @@ use App\Http\Controllers\Public\HomeController;
 use App\Http\Controllers\Public\NewsArticleController;
 use App\Http\Controllers\Public\SchoolProfileController;
 use App\Http\Controllers\Public\TeacherDirectoryController;
+use App\Http\Controllers\Student\StudentAttendanceController;
+use App\Http\Controllers\Student\StudentProfileController;
+use App\Http\Controllers\Student\StudentScheduleController;
+use App\Http\Controllers\Teacher\TeacherAttendanceController;
+use App\Http\Controllers\Teacher\TeacherProfileController;
+use App\Http\Controllers\Teacher\TeacherScheduleController;
 use App\Http\Controllers\TeacherWorkspaceController;
 use Illuminate\Support\Facades\Route;
 
@@ -63,16 +75,43 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:guru'])->
     /*
     | The teacher's own workspace.
     |
-    | A teacher is not an administrator, so the class roster they are allowed to
-    | see is exposed here. ClassPolicy::view and ClassPolicy::viewRoster resolve
-    | the scope from the teacher's own assignments.
+    | A teacher is not an administrator, so the class roster, the timetable, the
+    | register and the monthly report they are allowed to see are exposed here.
+    | ClassPolicy::view and ClassPolicy::viewRoster resolve the class scope from
+    | the teacher's own assignments.
     |
-    | This group is declared before the public /guru/{slug} directory route on
-    | purpose: "/guru/kelas" is a static segment, and the directory wildcard
-    | would otherwise capture it and return a 404.
+    | This whole group is declared before the public /guru/{slug} directory route
+    | on purpose: "/guru/kelas", "/guru/jadwal" and "/guru/profil" are static
+    | segments, and the directory wildcard would otherwise capture them and
+    | return a 404 — for a signed-in teacher, which is exactly the class of bug a
+    | route-ordering mistake produces and a status-code check alone would hide.
     */
     Route::get('/guru/kelas', [TeacherWorkspaceController::class, 'classes'])->name('guru.classes.index');
     Route::get('/guru/kelas/{class}', [TeacherWorkspaceController::class, 'show'])->name('guru.classes.show');
+
+    Route::get('/guru/profil', [TeacherProfileController::class, 'show'])->name('guru.profil');
+    Route::put('/guru/profil', [TeacherProfileController::class, 'update'])->name('guru.profil.update');
+
+    Route::get('/guru/jadwal', [TeacherScheduleController::class, 'index'])->name('guru.jadwal.index');
+
+    /*
+     | The literal "laporan" segment is declared before the {session} wildcard:
+     | "/guru/absensi/laporan" would otherwise be captured as a session id.
+     */
+    Route::get('/guru/absensi/laporan', [TeacherAttendanceController::class, 'report'])->name('guru.absensi.report');
+    Route::get('/guru/absensi/laporan/cetak', [TeacherAttendanceController::class, 'printReport'])
+        ->name('guru.absensi.report.print');
+    Route::get('/guru/absensi', [TeacherAttendanceController::class, 'index'])->name('guru.absensi.index');
+    Route::post('/guru/absensi/jadwal/{classSchedule}', [TeacherAttendanceController::class, 'open'])
+        ->middleware('throttle:attendance-mark')
+        ->name('guru.absensi.open');
+    Route::get('/guru/absensi/{session}', [TeacherAttendanceController::class, 'show'])->name('guru.absensi.show');
+    Route::post('/guru/absensi/{session}', [TeacherAttendanceController::class, 'store'])
+        ->middleware('throttle:attendance-mark')
+        ->name('guru.absensi.store');
+    Route::put('/guru/absensi/{session}/koreksi', [TeacherAttendanceController::class, 'correct'])
+        ->middleware('throttle:attendance-correct')
+        ->name('guru.absensi.correct');
 });
 
 Route::get('/guru', [TeacherDirectoryController::class, 'index'])->name('teachers.index');
@@ -99,6 +138,67 @@ Route::post('/ppdb/status/{token}/dokumen', [AdmissionController::class, 'upload
 Route::post('/ppdb/status/{token}/hentikan', [AdmissionController::class, 'withdraw'])
     ->middleware('throttle:ppdb-status')
     ->name('ppdb.status.withdraw');
+
+/*
+|--------------------------------------------------------------------------
+| PPDB applicant portal
+|--------------------------------------------------------------------------
+|
+| A second, self-service way to apply, for a candidate who wants to complete
+| the application progressively instead of sending one form.
+|
+| The public routes above are untouched: a visitor can still submit the
+| one-shot form without an account, and the status token flow is unchanged. The
+| portal is a separate surface with its own account, its own progressive
+| sections and its own authorization, and the two never share state except the
+| review queue an administrator already had.
+|
+| Everything under /ppdb/akun is role:calon and authorised on the *caller's own*
+| application. There is deliberately no application id in these URLs, so a
+| candidate cannot address another candidate's data by editing a path.
+|
+*/
+
+Route::middleware(['guest'])->group(function (): void {
+    Route::get('/ppdb/daftar-akun', [RegisteredApplicantController::class, 'create'])
+        ->name('ppdb.portal.register.create');
+    Route::post('/ppdb/daftar-akun', [RegisteredApplicantController::class, 'store'])
+        ->middleware('throttle:ppdb-register')
+        ->name('ppdb.portal.register.store');
+});
+
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:calon'])
+    ->prefix('ppdb/akun')
+    ->name('ppdb.portal.')
+    ->group(function (): void {
+        Route::get('/', [ApplicantPortalController::class, 'dashboard'])->name('dashboard');
+        Route::get('/biodata', [ApplicantBiodataController::class, 'edit'])->name('biodata');
+        Route::put('/biodata/{application}', [ApplicantBiodataController::class, 'update'])
+            ->middleware('throttle:ppdb-portal-write')
+            ->name('biodata.update');
+        Route::get('/wali', [ApplicantGuardianController::class, 'index'])->name('guardians');
+        Route::post('/wali/{application}', [ApplicantGuardianController::class, 'store'])
+            ->middleware('throttle:ppdb-portal-write')
+            ->name('guardians.store');
+        Route::put('/wali/{application}/{guardian}', [ApplicantGuardianController::class, 'update'])
+            ->middleware('throttle:ppdb-portal-write')
+            ->name('guardians.update');
+        Route::get('/dokumen', [ApplicantDocumentController::class, 'index'])->name('documents');
+        Route::post('/dokumen/{application}', [ApplicantDocumentController::class, 'store'])
+            ->middleware('throttle:ppdb-portal-upload')
+            ->name('documents.store');
+        Route::put('/dokumen/{document}', [ApplicantDocumentController::class, 'replace'])
+            ->middleware('throttle:ppdb-portal-upload')
+            ->name('documents.replace');
+        Route::get('/dokumen/{document}/unduh', [ApplicantDocumentController::class, 'download'])
+            ->name('documents.download');
+        Route::get('/review', [ApplicantPortalController::class, 'review'])->name('review');
+        Route::post('/review', [ApplicantPortalController::class, 'submit'])
+            ->middleware('throttle:ppdb-portal-write')
+            ->name('submit');
+        Route::get('/status', [ApplicantPortalController::class, 'status'])->name('status');
+        Route::get('/notifikasi', [ApplicantPortalController::class, 'notifications'])->name('notifications');
+    });
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -127,7 +227,7 @@ Route::middleware(['auth', 'auth.session', 'active'])->group(function (): void {
         ->name('verification.verify');
 });
 
-Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administrator,guru,siswa'])->group(function (): void {
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administrator,guru,siswa,calon'])->group(function (): void {
     /*
     | The shared entry point. It resolves the role landing page from the
     | session so the post-login redirect in AuthenticatedSessionController
@@ -157,6 +257,24 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:guru'])
 Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:siswa'])
     ->get('/dashboard/siswa', [DashboardController::class, 'index'])
     ->name('dashboard.siswa');
+
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:calon'])
+    ->get('/dashboard/ppdb', [DashboardController::class, 'index'])
+    ->name('dashboard.ppdb');
+
+/*
+| Student workspace.
+|
+| Resolved entirely from the authenticated student's own records, so no student
+| id appears in any of these URLs. /siswa is not shadowed by a public wildcard,
+| but the same ordering rule is kept for consistency with the teacher group.
+*/
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:siswa'])->group(function (): void {
+    Route::get('/siswa/profil', [StudentProfileController::class, 'show'])->name('siswa.profil');
+    Route::put('/siswa/profil', [StudentProfileController::class, 'update'])->name('siswa.profil.update');
+    Route::get('/siswa/jadwal', [StudentScheduleController::class, 'index'])->name('siswa.jadwal.index');
+    Route::get('/siswa/absensi', [StudentAttendanceController::class, 'index'])->name('siswa.absensi.index');
+});
 
 Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:guru'])->group(function (): void {
     /*
@@ -275,6 +393,22 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
     Route::patch('/class-teacher-assignments/{classTeacherAssignment}/status', [AdminClassTeacherAssignmentController::class, 'updateStatus'])
         ->name('class-teacher-assignments.status.update');
 
+    /*
+    | The weekly class schedule. There is no destroy route on purpose: attendance
+    | sessions reference a schedule, so a lesson is deactivated and can be
+    | reactivated later.
+    */
+    Route::get('/class-schedules', [AdminClassScheduleController::class, 'index'])->name('class-schedules.index');
+    Route::get('/class-schedules/create', [AdminClassScheduleController::class, 'create'])->name('class-schedules.create');
+    Route::post('/class-schedules', [AdminClassScheduleController::class, 'store'])->name('class-schedules.store');
+    Route::get('/class-schedules/{classSchedule}', [AdminClassScheduleController::class, 'show'])->name('class-schedules.show');
+    Route::get('/class-schedules/{classSchedule}/edit', [AdminClassScheduleController::class, 'edit'])->name('class-schedules.edit');
+    Route::put('/class-schedules/{classSchedule}', [AdminClassScheduleController::class, 'update'])->name('class-schedules.update');
+    Route::post('/class-schedules/{classSchedule}/deactivate', [AdminClassScheduleController::class, 'deactivate'])
+        ->name('class-schedules.deactivate');
+    Route::post('/class-schedules/{classSchedule}/reactivate', [AdminClassScheduleController::class, 'reactivate'])
+        ->name('class-schedules.reactivate');
+
     Route::resource('enrollments', AdminEnrollmentController::class)
         ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
     Route::post('/enrollments/{enrollment}/transfer', [AdminEnrollmentController::class, 'transfer'])
@@ -310,5 +444,8 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
 
     Route::post('/ppdb/applications/{admissionApplication}/documents', [AdminAdmissionDocumentController::class, 'store'])->name('ppdb.applications.documents.store');
     Route::patch('/ppdb/documents/{document}', [AdminAdmissionDocumentController::class, 'updateStatus'])->name('ppdb.documents.update-status');
+    Route::patch('/ppdb/documents/{document}/revision', [AdminAdmissionDocumentController::class, 'requestRevision'])->name('ppdb.documents.request-revision');
     Route::get('/ppdb/documents/{document}/download', [AdminAdmissionDocumentController::class, 'download'])->name('ppdb.documents.download');
+    Route::post('/ppdb/applications/{admissionApplication}/announce', [AdminAdmissionApplicationController::class, 'announce'])
+        ->name('ppdb.applications.announce');
 });

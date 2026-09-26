@@ -91,27 +91,30 @@
                         --}}
                         @if (auth()->user()?->can('access-administrator-area'))
                             <x-admin.navigation />
+                        @elseif (auth()->user()?->isCalon())
+                            <x-candidate.navigation />
+                        @elseif (auth()->user()?->isGuru())
+                            <x-workspace.navigation
+                                :items="[
+                                    ['label' => 'Dashboard', 'route' => 'dashboard.guru', 'pattern' => 'dashboard.guru'],
+                                    ['label' => 'Kelas saya', 'route' => 'guru.classes.index', 'pattern' => 'guru.classes.*'],
+                                    ['label' => 'Jadwal pelajaran', 'route' => 'guru.jadwal.index', 'pattern' => 'guru.jadwal.*'],
+                                    ['label' => 'Absensi', 'route' => 'guru.absensi.index', 'pattern' => 'guru.absensi.*'],
+                                    ['label' => 'Laporan bulanan', 'route' => 'guru.absensi.report', 'pattern' => 'guru.absensi.report*'],
+                                    ['label' => 'Biodata guru', 'route' => 'guru.profil', 'pattern' => 'guru.profil*'],
+                                ]"
+                            />
                         @else
-                            <nav class="space-y-1" aria-label="Navigasi akun">
-                                <a
-                                    href="{{ route('dashboard') }}"
-                                    @if (request()->routeIs('dashboard.*')) aria-current="page" @endif
-                                    class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs('dashboard.*') ? 'bg-cyan-50 text-cyan-900' : 'text-slate-700 hover:bg-slate-100' }}"
-                                >Dashboard</a>
-                                @if (auth()->user()?->isGuru())
-                                    <a
-                                        href="{{ route('guru.classes.index') }}"
-                                        @if (request()->routeIs('guru.classes.*')) aria-current="page" @endif
-                                        class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs('guru.classes.*') ? 'bg-cyan-50 text-cyan-900' : 'text-slate-700 hover:bg-slate-100' }}"
-                                    >Kelas saya</a>
-                                @endif
-                                <a
-                                    href="{{ route('notifications.index') }}"
-                                    @if (request()->routeIs('notifications.*')) aria-current="page" @endif
-                                    class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.*') ? 'bg-cyan-50 text-cyan-900' : 'text-slate-700 hover:bg-slate-100' }}"
-                                >Notifikasi</a>
-                                <a href="{{ route('home') }}" class="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Situs publik</a>
-                            </nav>
+                            <x-workspace.navigation
+                                :items="[
+                                    ['label' => 'Dashboard', 'route' => 'dashboard.siswa', 'pattern' => 'dashboard.siswa'],
+                                    ['label' => 'Jadwal pelajaran', 'route' => 'siswa.jadwal.index', 'pattern' => 'siswa.jadwal.*'],
+                                    ['label' => 'Absensi saya', 'route' => 'siswa.absensi.index', 'pattern' => 'siswa.absensi.*'],
+                                    ['label' => 'Biodata siswa', 'route' => 'siswa.profil', 'pattern' => 'siswa.profil*'],
+                                    ['label' => 'Notifikasi', 'route' => 'notifications.index', 'pattern' => 'notifications.*'],
+                                    ['label' => 'Situs publik', 'route' => 'home', 'pattern' => 'home'],
+                                ]"
+                            />
                         @endif
                     </div>
                 </aside>

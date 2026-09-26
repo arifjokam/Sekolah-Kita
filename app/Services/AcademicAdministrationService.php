@@ -184,19 +184,35 @@ class AcademicAdministrationService
     {
         Gate::forUser($actor)->authorize('create', Term::class);
         $this->assertTermDates($data);
+        $this->assertTermDoesNotOverlap($data, null);
 
         $term = DB::transaction(function () use ($actor, $data): Term {
+            $status = TermStatus::from((string) $data['status']);
+
+            // Only one semester of a year may be active: "the current semester" is
+            // a single value every current-scope query depends on. Activating one
+            // through the create form therefore closes its sibling rather than
+            // leaving two active rows behind.
+            if ($status === TermStatus::Active) {
+                Term::query()
+                    ->where('academic_year_id', (int) $data['academic_year_id'])
+                    ->where('status', TermStatus::Active->value)
+                    ->update(['status' => TermStatus::Closed->value]);
+            }
+
             $term = Term::query()->create([
                 'academic_year_id' => (int) $data['academic_year_id'],
                 'sequence' => (int) $data['sequence'],
                 'label' => (string) $data['label'],
                 'starts_on' => (string) $data['starts_on'],
                 'ends_on' => (string) $data['ends_on'],
-                'status' => TermStatus::from((string) $data['status']),
+                'status' => $status,
             ]);
 
             $this->audit->recordOrFail($actor, 'term.created', 'term', $term->getKey(), context: [
                 'status' => $term->status->value,
+                'academic_year_id' => $term->academic_year_id,
+                'sequence' => $term->sequence,
             ]);
 
             return $term;
@@ -215,19 +231,32 @@ class AcademicAdministrationService
             'starts_on' => $data['starts_on'] ?? $term->starts_on?->toDateString(),
             'ends_on' => $data['ends_on'] ?? $term->ends_on?->toDateString(),
         ]);
+        $this->assertTermDoesNotOverlap($data, $term);
 
         return DB::transaction(function () use ($actor, $term, $data): Term {
+            $status = TermStatus::from((string) $data['status']);
+
+            if ($status === TermStatus::Active) {
+                Term::query()
+                    ->where('academic_year_id', (int) $data['academic_year_id'])
+                    ->whereKeyNot($term->getKey())
+                    ->where('status', TermStatus::Active->value)
+                    ->update(['status' => TermStatus::Closed->value]);
+            }
+
             $term->fill([
                 'academic_year_id' => (int) $data['academic_year_id'],
                 'sequence' => (int) $data['sequence'],
                 'label' => (string) $data['label'],
                 'starts_on' => (string) $data['starts_on'],
                 'ends_on' => (string) $data['ends_on'],
-                'status' => TermStatus::from((string) $data['status']),
+                'status' => $status,
             ])->save();
 
             $this->audit->recordOrFail($actor, 'term.updated', 'term', $term->getKey(), context: [
                 'status' => $term->status->value,
+                'academic_year_id' => $term->academic_year_id,
+                'sequence' => $term->sequence,
             ]);
 
             return $term;
@@ -499,6 +528,39 @@ class AcademicAdministrationService
         if ($startsOn === '' || $endsOn === '' || strtotime($startsOn) >= strtotime($endsOn)) {
             throw ValidationException::withMessages([
                 'ends_on' => 'Tanggal selesai harus setelah tanggal mulai.',
+            ]);
+        }
+    }
+
+    /**
+     * Two semesters of one academic year may not occupy the same dates.
+     *
+     * The form request already reports this per field; repeating it here means a
+     * write that arrives by any other path still cannot produce overlapping
+     * semesters.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function assertTermDoesNotOverlap(array $data, ?Term $term = null): void
+    {
+        $yearId = (int) ($data['academic_year_id'] ?? 0);
+        $startsOn = (string) ($data['starts_on'] ?? '');
+        $endsOn = (string) ($data['ends_on'] ?? '');
+
+        if ($yearId <= 0 || $startsOn === '' || $endsOn === '') {
+            return;
+        }
+
+        $overlaps = Term::query()
+            ->where('academic_year_id', $yearId)
+            ->when($term instanceof Term, fn (Builder $query): Builder => $query->whereKeyNot($term->getKey()))
+            ->where('starts_on', '<=', $endsOn)
+            ->where('ends_on', '>=', $startsOn)
+            ->exists();
+
+        if ($overlaps) {
+            throw ValidationException::withMessages([
+                'starts_on' => 'Periode semester ini bertumpuk dengan semester lain pada tahun ajaran yang sama.',
             ]);
         }
     }

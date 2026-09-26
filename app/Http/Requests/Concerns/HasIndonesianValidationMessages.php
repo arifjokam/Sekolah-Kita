@@ -17,6 +17,18 @@ trait HasIndonesianValidationMessages
      */
     public function messages(): array
     {
+        return $this->indonesianMessages();
+    }
+
+    /**
+     * The same message set, exposed so a request that needs to add a few
+     * domain-specific messages can merge them instead of re-declaring
+     * `messages()` and shadowing this one.
+     *
+     * @return array<string, string>
+     */
+    protected function indonesianMessages(): array
+    {
         return [
             'required' => 'Kolom :attribute wajib diisi.',
             'required_if' => 'Kolom :attribute wajib diisi ketika :other bernilai :value.',

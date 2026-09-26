@@ -61,6 +61,16 @@ class ClassModel extends Model
         return $this->enrollments()->active();
     }
 
+    public function classSchedules(): HasMany
+    {
+        return $this->hasMany(ClassSchedule::class, 'class_id');
+    }
+
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class, 'class_id');
+    }
+
     public function currentHomeroomTeacher(): ?ClassTeacherAssignment
     {
         return $this->classTeacherAssignments()

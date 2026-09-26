@@ -35,6 +35,20 @@ class DevelopmentAccountsSeeder extends Seeder
         ['name' => 'Siswa Test', 'email' => 'siswa.test@sekolah.local', 'role' => UserRole::Siswa],
     ];
 
+    /**
+     * PPDB applicant portal identities.
+     *
+     * Kept separate from ACCOUNTS because these are candidates, not staff or
+     * students: they own an AdmissionApplication and nothing else. One is fully
+     * submitted, the other has a document waiting for a replacement.
+     *
+     * @var list<array{name: string, email: string}>
+     */
+    public const APPLICANTS = [
+        ['name' => 'Rangga Wicaksana', 'email' => 'calon.lengkap@sekolah.local'],
+        ['name' => 'Sekar Arum', 'email' => 'calon.perbaikan@sekolah.local'],
+    ];
+
     public function run(): void
     {
         foreach (self::ACCOUNTS as $account) {
@@ -51,6 +65,29 @@ class DevelopmentAccountsSeeder extends Seeder
 
         $this->linkGuru();
         $this->linkSiswa();
+        $this->applicants();
+    }
+
+    /**
+     * Mint the applicant portal identities.
+     *
+     * A candidate is a fourth role, not a student: no Student, no Enrollment and
+     * no class is created here, which is exactly the invariant the portal tests
+     * assert.
+     */
+    private function applicants(): void
+    {
+        foreach (self::APPLICANTS as $applicant) {
+            $user = User::query()->firstOrNew(['email' => $applicant['email']]);
+
+            $user->forceFill([
+                'name' => $applicant['name'],
+                'role' => UserRole::Calon,
+                'status' => AccountStatus::Active,
+                'email_verified_at' => $user->email_verified_at ?? now(),
+                'password' => Hash::make(self::PASSWORD),
+            ])->save();
+        }
     }
 
     /**

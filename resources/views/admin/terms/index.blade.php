@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Term · Admin')
+@section('title', 'Semester · Admin')
 
 @section('content')
     @php
         $breadcrumbs = [
             ['label' => 'Dashboard', 'route' => 'dashboard.administrator'],
             ['label' => 'Akademik'],
-            ['label' => 'Term'],
+            ['label' => 'Semester'],
         ];
 
         $statusOptions = collect($statuses)->mapWithKeys(
@@ -19,7 +19,7 @@
         );
 
         $filterItems = [
-            ['name' => 'search', 'label' => 'Cari', 'placeholder' => 'Label term'],
+            ['name' => 'search', 'label' => 'Cari', 'placeholder' => 'Label semester'],
             ['name' => 'academic_year_id', 'label' => 'Tahun ajaran', 'type' => 'select', 'options' => $yearOptions],
             ['name' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => $statusOptions],
         ];
@@ -27,11 +27,11 @@
 
     <x-admin.page-header
         eyebrow="Master data"
-        title="Term"
-        description="Term membagi satu tahun ajaran menjadi periode belajar. Hanya satu term yang boleh aktif dalam satu tahun ajaran."
+        title="Semester"
+        description="Semester membagi satu tahun ajaran menjadi periode belajar. Satu tahun ajaran dapat memiliki Semester 1 dan Semester 2; hanya satu yang boleh aktif pada saat bersamaan."
     >
         <x-slot:actions>
-            <a href="{{ route('admin.terms.create') }}" class="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Tambah term</a>
+            <a href="{{ route('admin.terms.create') }}" class="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Tambah semester</a>
         </x-slot:actions>
     </x-admin.page-header>
 
@@ -40,10 +40,10 @@
     <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
-                <caption class="sr-only">Daftar term</caption>
+                <caption class="sr-only">Daftar semester</caption>
                 <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
-                        <th scope="col" class="px-5 py-3">Term</th>
+                        <th scope="col" class="px-5 py-3">Semester</th>
                         <th scope="col" class="px-5 py-3">Tahun ajaran</th>
                         <th scope="col" class="px-5 py-3">Periode</th>
                         <th scope="col" class="px-5 py-3">Assignment</th>
@@ -55,7 +55,7 @@
                     @forelse ($terms as $term)
                         <tr>
                             <td class="px-5 py-4">
-                                <p class="font-semibold text-slate-950">{{ $term->sequence }}. {{ $term->label }}</p>
+                                <p class="font-semibold text-slate-950">{{ $term->semesterLabel() }}</p>
                             </td>
                             <td class="px-5 py-4 text-slate-600">{{ $term->academicYear?->label ?? '—' }}</td>
                             <td class="whitespace-nowrap px-5 py-4 text-slate-600">{{ $term->starts_on->format('d M Y') }} — {{ $term->ends_on->format('d M Y') }}</td>
@@ -80,9 +80,9 @@
                         <tr>
                             <td colspan="6" class="px-5 py-4">
                                 <x-admin.empty-state
-                                    label="Belum ada term"
-                                    message="Term diperlukan sebelum assignment mengajar dapat dikaitkan ke periode belajar."
-                                    action-label="Tambah term"
+                                    label="Belum ada semester"
+                                    message="Semester diperlukan sebelum jadwal pelajaran dan assignment mengajar dapat dikaitkan ke periode belajar."
+                                    action-label="Tambah semester"
                                     action-route="admin.terms.create"
                                 />
                             </td>

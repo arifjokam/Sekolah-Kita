@@ -8,6 +8,7 @@ enum NotificationCategory: string
     case Content = 'content';
     case Contact = 'contact';
     case Admission = 'admission';
+    case Academic = 'academic';
     case System = 'system';
 
     public function label(): string
@@ -17,6 +18,7 @@ enum NotificationCategory: string
             self::Content => 'Konten',
             self::Contact => 'Kontak',
             self::Admission => 'PPDB',
+            self::Academic => 'Akademik',
             self::System => 'Sistem',
         };
     }

@@ -93,6 +93,16 @@ class Teacher extends Model
         return $this->teachingAssignments()->active();
     }
 
+    public function classSchedules(): HasMany
+    {
+        return $this->hasMany(ClassSchedule::class, 'teacher_id');
+    }
+
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class, 'teacher_id');
+    }
+
     public function scopePubliclyVisible(Builder $query): Builder
     {
         return $query

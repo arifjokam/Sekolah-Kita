@@ -29,6 +29,11 @@ class Subject extends Model
         return $this->hasMany(TeachingAssignment::class);
     }
 
+    public function classSchedules(): HasMany
+    {
+        return $this->hasMany(ClassSchedule::class, 'subject_id');
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
