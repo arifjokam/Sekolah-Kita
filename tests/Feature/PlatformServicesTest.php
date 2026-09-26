@@ -38,6 +38,25 @@ class PlatformServicesTest extends TestCase
         $this->assertNotEmpty(DB::select('SHOW INDEX FROM audit_logs WHERE Key_name = "audit_logs_occurred_at_index"'));
         $this->assertNotEmpty(DB::select('SHOW INDEX FROM admission_applications WHERE Key_name = "admission_applications_duplicate_lookup_index"'));
         $this->assertNotEmpty(DB::select('SHOW INDEX FROM notifications WHERE Key_name = "notifications_recipient_read_index"'));
+        $this->assertNotEmpty(DB::select('SHOW INDEX FROM notifications WHERE Key_name = "notifications_recipient_timeline_index"'));
+    }
+
+    public function test_notification_listing_query_is_satisfied_by_an_index(): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            $this->markTestSkipped('MariaDB-specific query plan test');
+        }
+
+        // Regression guard: without a created_at suffix on the recipient index
+        // this newest-first listing degrades into a full sort of the user's
+        // entire notification history on every page load.
+        $plan = DB::select(
+            'EXPLAIN SELECT * FROM notifications WHERE notifiable_type = ? AND notifiable_id = ? ORDER BY created_at DESC LIMIT 20',
+            [User::class, 1],
+        );
+
+        $this->assertNotEmpty($plan);
+        $this->assertStringNotContainsString('filesort', strtolower((string) $plan[0]->Extra));
     }
 
     public function test_audit_context_redacts_sensitive_values(): void
@@ -153,9 +172,116 @@ class PlatformServicesTest extends TestCase
         $this->assertStringNotContainsString(config('app.key'), json_encode($result, JSON_THROW_ON_ERROR));
     }
 
-    public function test_readiness_uses_cached_security_configuration_and_requires_strict_redis_flag(): void
+    public function test_readiness_reports_granular_http_checks_and_rejects_wildcards(): void
+    {
+        $result = $this->readinessWithSecurityConfiguration();
+
+        foreach (['https_url', 'trusted_proxies', 'trusted_hosts', 'secure_cookies', 'http_only_cookies'] as $name) {
+            $this->assertTrue(
+                $this->readinessCheck($result, $name)['ok'],
+                $name.' should pass for an explicit https configuration.'
+            );
+        }
+
+        // A wildcard trusted proxy means any host can spoof X-Forwarded-*.
+        $result = $this->readinessWithSecurityConfiguration(['app.trusted_proxies' => ['*']]);
+        $this->assertFalse($this->readinessCheck($result, 'trusted_proxies')['ok']);
+
+        $result = $this->readinessWithSecurityConfiguration(['app.trusted_hosts' => ['*']]);
+        $this->assertFalse($this->readinessCheck($result, 'trusted_hosts')['ok']);
+
+        // A plaintext APP_URL invalidates the secure-cookie and HSTS posture.
+        $result = $this->readinessWithSecurityConfiguration(['app.url' => 'http://school.example']);
+        $this->assertFalse($this->readinessCheck($result, 'https_url')['ok']);
+
+        $result = $this->readinessWithSecurityConfiguration(['session.secure' => false]);
+        $this->assertFalse($this->readinessCheck($result, 'secure_cookies')['ok']);
+    }
+
+    public function test_readiness_distinguishes_dependency_groups(): void
+    {
+        $result = app(ProductionReadinessService::class)->check();
+
+        $this->assertSame([
+            'application',
+            'http',
+            'redis',
+            'cache',
+            'session',
+            'queue',
+            'rate_limiting',
+            'database',
+            'storage',
+            'mail',
+            'administrator_security',
+        ], array_keys($result['groups']));
+
+        // Every check is explicitly marked blocking or advisory.
+        foreach ($result['checks'] as $check) {
+            $this->assertArrayHasKey('blocking', $check);
+            $this->assertIsBool($check['blocking']);
+        }
+    }
+
+    public function test_readiness_rejects_database_backed_runtime_topology_in_production(): void
     {
         config([
+            'sekolah-kita.platform.redis_required_in_production' => true,
+            'cache.default' => 'database',
+            'session.driver' => 'database',
+            'queue.default' => 'database',
+            'cache.limiter' => 'database',
+        ]);
+
+        $result = app(ProductionReadinessService::class)->check();
+
+        $this->assertFalse($this->readinessCheck($result, 'cache_driver')['ok']);
+        $this->assertFalse($this->readinessCheck($result, 'session_driver')['ok']);
+        $this->assertFalse($this->readinessCheck($result, 'queue_driver')['ok']);
+        $this->assertFalse($this->readinessCheck($result, 'rate_limiter_store')['ok']);
+        $this->assertFalse($result['ready']);
+    }
+
+    public function test_readiness_fails_closed_when_worker_timeout_could_duplicate_jobs(): void
+    {
+        config([
+            'queue.default' => 'redis',
+            'queue.connections.redis.retry_after' => 90,
+            'sekolah-kita.queue.worker_timeout_seconds' => 150,
+        ]);
+
+        $result = app(ProductionReadinessService::class)->check();
+
+        $this->assertFalse($this->readinessCheck($result, 'queue_retry_after')['ok']);
+
+        config(['queue.connections.redis.retry_after' => 300]);
+        $result = app(ProductionReadinessService::class)->check();
+        $this->assertTrue($this->readinessCheck($result, 'queue_retry_after')['ok']);
+    }
+
+    public function test_readiness_reports_administrator_mfa_as_a_blocking_gap(): void
+    {
+        config(['sekolah-kita.security.administrator_mfa_required' => true]);
+        $result = app(ProductionReadinessService::class)->check();
+        $mfa = $this->readinessCheck($result, 'administrator_mfa');
+
+        $this->assertFalse($mfa['ok']);
+        $this->assertTrue($mfa['blocking']);
+        $this->assertStringContainsString('not implemented', $mfa['message']);
+
+        // A named owner can record an accepted, time-boxed exception.
+        config(['sekolah-kita.security.administrator_mfa_required' => false]);
+        $result = app(ProductionReadinessService::class)->check();
+        $this->assertTrue($this->readinessCheck($result, 'administrator_mfa')['ok']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function readinessWithSecurityConfiguration(array $overrides = []): array
+    {
+        config(array_merge([
             'sekolah-kita.audit.failure_mode' => 'throw',
             'sekolah-kita.platform.redis_required_in_production' => true,
             'app.trusted_proxies' => ['10.0.0.0/8'],
@@ -163,24 +289,22 @@ class PlatformServicesTest extends TestCase
             'app.url' => 'https://school.example',
             'session.secure' => true,
             'session.http_only' => true,
-        ]);
+        ], $overrides));
 
-        $result = app(ProductionReadinessService::class)->check();
-        $securityCheck = collect($result['checks'])->firstWhere('name', 'security_configuration');
-        $this->assertTrue($securityCheck['ok']);
+        return app(ProductionReadinessService::class)->check();
+    }
 
-        config(['sekolah-kita.platform.redis_required_in_production' => false]);
-        $result = app(ProductionReadinessService::class)->check();
-        $securityCheck = collect($result['checks'])->firstWhere('name', 'security_configuration');
-        $this->assertFalse($securityCheck['ok']);
+    /**
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    private function readinessCheck(array $result, string $name): array
+    {
+        $check = collect($result['checks'])->firstWhere('name', $name);
 
-        config([
-            'sekolah-kita.platform.redis_required_in_production' => true,
-            'app.trusted_proxies' => ['*'],
-        ]);
-        $result = app(ProductionReadinessService::class)->check();
-        $securityCheck = collect($result['checks'])->firstWhere('name', 'security_configuration');
-        $this->assertFalse($securityCheck['ok']);
+        $this->assertIsArray($check, 'The readiness report is missing the "'.$name.'" check.');
+
+        return $check;
     }
 
     public function test_cache_warm_command_dispatches_bounded_maintenance_job(): void

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Listeners\LogQueueFailures;
 use App\Models\AcademicYear;
 use App\Models\Achievement;
 use App\Models\AdmissionApplication;
@@ -53,6 +54,8 @@ use App\View\Composers\AuthenticatedLayoutComposer;
 use App\View\Composers\PublicSiteProfileComposer;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
@@ -102,6 +105,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(ApplicationDocument::class, ApplicationDocumentPolicy::class);
 
         Teacher::observe(TeacherObserver::class);
+
+        Event::listen(JobFailed::class, [LogQueueFailures::class, 'handle']);
 
         Gate::define('manage-users', static fn (User $user): bool => $user->isActive() && $user->hasVerifiedEmail() && $user->isAdministrator());
         Gate::define('access-administrator-area', static fn (User $user): bool => $user->isActive() && $user->hasVerifiedEmail() && $user->isAdministrator());

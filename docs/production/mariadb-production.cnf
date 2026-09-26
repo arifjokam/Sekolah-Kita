@@ -1,0 +1,254 @@
+# MariaDB — Sekolah Kita production server configuration
+
+**Placement:** `/etc/mysql/mariadb.conf.d/50-sekolah-kita.cnf`
+**Verify:** `sudo mariadb-admin variables | grep -E "max_connections|innodb_buffer_pool_size"`
+
+> Every number here is a starting point tied to a RAM budget. Recompute against
+> the host that will actually run this. A copied buffer-pool size that exceeds
+> physical RAM is worse than the default, because it invites the OOM killer to
+> choose MariaDB.
+
+---
+
+## 1. Connection budget
+
+`max_connections` must be derived, not guessed. Count every client:
+
+```
+max_connections ≥
+      (php-fpm pm.max_children × pdo connections per worker)   # web tier
+    + (queue workers × pdo connections per worker)              # background
+    + scheduler / maintenance overhead
+    + interactive admin sessions
+    + 20% headroom
+```
+
+`pdo connections per worker` is the part that is usually understated. PDO opens
+**one connection per PHP process**, held for the process's lifetime, not one
+per query. But MariaDB's `max_connections` is really a limit on *concurrent
+statements*, and a request executing a join holds a connection for the duration
+of that statement. So a FPM pool of 12 children contributes up to 12
+connections, and a `pool_size=5` setting means a request may hold one
+connection while running several statements on it — it does **not** mean 5
+connections.
+
+Worked example, matching `php-fpm-pool.conf` §3 (12 children, 2 queue workers,
+1 scheduler):
+
+```
+web:            12
+queue workers:   2
+scheduler:       1
+admin:           3   (a human tailing a slow query)
+                 ---
+subtotal:       18
+× 1.2 headroom: 22
+```
+
+```ini
+max_connections = 40
+```
+
+The headroom above the computed figure is deliberate: connection spikes are
+normal (a cache purge, a bulk import, a second deploy), and a
+`max_connections` set exactly at the steady-state peak turns every spike into a
+`Too many connections` outage.
+
+**`max_connections` is not free.** Each connection carries per-thread stack
+memory and bookkeeping, so setting it to 1000 "just in case" costs real RAM and
+can make the database the OOM victim. 40 is sized for this application on a
+small host; a host that genuinely needs more must be sized from measured
+concurrency, not from the ceiling.
+
+## 2. InnoDB buffer pool
+
+```ini
+# ~60-70% of RAM on a host dedicated to the database.
+# On a shared host (PHP-FPM + MariaDB + Redis in one VPS) use ~40%, and take
+# the difference out of the FPM budget in php-fpm-pool.conf §2.2.
+innodb_buffer_pool_size = 2G
+
+# Sized in chunks, not MiB, to avoid the buffer pool being truncated to a
+# multiple of the chunk size.
+innodb_buffer_pool_instances = 4
+innodb_buffer_pool_chunk_size = 512M
+
+# Log files sized for a minute of heavy write traffic. A log too small for the
+# write volume turns a commit into a checkpoint storm.
+innodb_log_file_size = 512M
+innodb_log_buffer_size = 32M
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+```
+
+`innodb_flush_log_at_trx_commit = 1` is the durability setting. It costs an
+fsync per commit and is the correct choice for a system holding student records,
+audit history, and admission decisions. Setting it to `2` would roughly double
+write throughput and would silently accept the loss of up to one second of
+committed transactions on an OS crash — a bad trade here, and one that would not
+show up in any functional test.
+
+`innodb_flush_method = O_DIRECT` avoids double-buffering through the OS page
+cache. Leave it on unless a measurement says otherwise.
+
+## 3. Slow query log
+
+This is the single most useful diagnostic for the 500–1000 user target, and it
+costs almost nothing when enabled.
+
+```ini
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+# 0.5s. This application should be answering indexed reads in single-digit
+# milliseconds; anything over half a second is a defect, not a slow query.
+long_query_time = 0.5
+log_queries_not_using_indexes = 0
+
+# Do not write the full statement text by default. Prepared statements can
+# contain bound values, and this application binds applicant PII.
+log_slow_extra = ON
+
+min_examined_row_limit = 50
+```
+
+`log_queries_not_using_indexes = 0` is deliberate. Turning it on on a write-heavy
+table logs every insert that happens to use an index prefix, which floods the
+log and trains operators to ignore it. `min_examined_row_limit` gives the
+narrower signal that matters: a query that examined many rows to return few.
+
+```bash
+sudo install -o mysql -g mysql -m 0640 /dev/null /var/log/mysql/slow.log
+sudo logrotate -f /etc/logrotate.d/mysql
+```
+
+**PII warning.** `long_query_time=0.5` and `log_slow_extra=ON` can record query
+plans that reference column values. Audit the slow log's contents the way you
+audit a database dump, keep it out of CI artifacts, and apply the same
+retention as other PII-bearing operational data.
+
+## 4. Connection behaviour
+
+```ini
+wait_timeout = 300
+interactive_timeout = 300
+# A FPM worker's connection is idle whenever PHP is rendering Blade, so this
+# must comfortably exceed the slowest expected non-DB time or workers reconnect
+# mid-request.
+connect_timeout = 10
+max_connect_errors = 100
+
+# Bound a single join that would otherwise run for minutes and hold a
+# connection the whole time.
+max_execution_time = 120
+```
+
+## 5. SQL mode and strictness
+
+```ini
+sql_mode = STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+```
+
+The application already sets `strict => true` on the connection, which is the
+primary control. This server-level setting is the second line of defence, so
+that a client connecting without the Laravel configuration still cannot write a
+truncated or out-of-range value into student records.
+
+## 6. Charset
+
+```ini
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+```
+
+Indonesian names must round-trip. `utf8mb3` cannot represent some characters
+and silently truncates. The application connection already requests
+`utf8mb4`/`utf8mb4_unicode_ci`; keeping the server consistent avoids
+per-connection conversion.
+
+## 7. Backups — see also `docs/BACKUP_AND_RESTORE.md`
+
+```ini
+# Binary logs enable point-in-time recovery, which turns a daily dump into an
+# RPO measured in minutes rather than 24 hours. Costs disk and some write
+# overhead; turn it on only if the PII retention policy permits the extra
+# on-disk copies.
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_expire_logs_seconds = 604800
+sync_binlog = 1
+
+# Record the statement in the binlog so a restore can tell what ran.
+log_bin_trust_function_creators = 0
+```
+
+`sync_binlog = 1` pairs with `innodb_flush_log_at_trx_commit = 1` for full
+durability. If write throughput becomes a measured problem, `sync_binlog = 0`
+is the first lever to test — but it trades durability for speed and should be a
+recorded decision, not a silent default.
+
+## 8. Read replica (optional)
+
+The application supports read/write splitting through `DB_READ_HOST` and
+`DB_WRITE_HOST` (`config/database.php`). When no host is set, the keys are
+absent from the configuration entirely — a present-but-empty `read` key would
+make the framework build a replica connection from nothing.
+
+Replication caveats that matter for correctness, not just speed:
+
+- **A replica is eventually consistent.** Assigning a reviewer, deciding an
+  application, and immediately re-reading it can return stale data. Any
+  read-after-write path must hit the primary.
+- **Audit history and notification reads** are the safest candidates for
+  replica offload: they are append-mostly and eventually read.
+- **Do not** put the PPDB status check on a replica. A candidate polling their
+  status after submitting would intermittently see the previous state, which is
+  indistinguishable from a rejected application.
+- If replication is enabled, confirm whether a replica is actually configured
+  before assuming reads are being served from it. `DB_READ_HOST` unset means
+  every read hits the primary.
+
+## 9. Verification checklist
+
+```text
+# Configuration is live
+sudo mariadb-admin variables | grep -E "^(max_connections|innodb_buffer_pool_size|long_query_time|innodb_flush_log_at_trx_commit)"
+
+# Connections are nowhere near the ceiling
+mariadb -e "SHOW STATUS LIKE 'Threads_connected'; SHOW STATUS LIKE 'Max_used_connections';"
+# Max_used_connections should sit well below max_connections. If it is close,
+# the FPM pool is larger than the connection budget allows.
+
+# The slow log is actually being written to
+sudo ls -l /var/log/mysql/slow.log
+mariadb -e "SHOW VARIABLES LIKE 'slow_query_log_file';"
+
+# No abandoned transactions are pinning version history
+mariadb -e "SHOW ENGINE INNODB STATUS\G" | grep -A3 "TRANSACTIONS"
+
+# Indexes match the reviewed set
+mariadb sekolah_kita -e "SHOW INDEX FROM notifications;"
+
+# The application's own view
+php artisan platform:readiness | sed -n '/^database/,/^$/p'
+php artisan migrate:status --no-interaction
+```
+
+## 10. Sizing summary for a 4 vCPU / 8 GB single-host deployment
+
+This is a **small** host running four services. The numbers below are
+internally consistent and are the documented starting point, not a claim of
+500–1000 concurrent-user capacity.
+
+| Resource | Allocation |
+| --- | --- |
+| Total RAM | 8 GB |
+| `innodb_buffer_pool_size` | 2 GB (~25%) |
+| Redis `maxmemory` | 1.5 GB (~19%) |
+| OS + Nginx + Supervisor | 1 GB |
+| Remaining for FPM | ~3.5 GB → `pm.max_children` ≈ 12 at 256M (`php-fpm-pool.conf` §2.2) |
+| `max_connections` | 40 |
+
+An 8 GB VPS with 12 FPM children is appropriate for a school site serving a
+few hundred concurrent readers with a high public-cache hit rate. Reaching
+500–1000 concurrent users with acceptable latency needs either a larger host or
+a read replica plus a CDN in front of the public pages. Quantifying that
+requires the load test in `docs/LOAD_TEST_PLAN.md` against the real hardware.

@@ -3,6 +3,41 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+/*
+|--------------------------------------------------------------------------
+| Read/Write Replica Helper
+|--------------------------------------------------------------------------
+|
+| Optional read/write splitting is only applied when at least one host is
+| actually configured. An empty array is deliberately never assigned, because
+| the framework treats a present-but-empty `read`/`write` key as a configured
+| replica set and would then build a connection from an empty configuration.
+|
+*/
+
+$replica = static function (string $prefix): ?array {
+    $values = array_filter([
+        'host' => env($prefix.'_HOST'),
+        'port' => env($prefix.'_PORT'),
+        'username' => env($prefix.'_USERNAME'),
+        'password' => env($prefix.'_PASSWORD'),
+        'unix_socket' => env($prefix.'_SOCKET'),
+    ], static fn (mixed $value): bool => $value !== null && $value !== '');
+
+    return $values === [] ? null : $values;
+};
+
+$connectionOptions = static fn (): array => extension_loaded('pdo_mysql')
+    ? array_filter([
+        Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+        PDO::ATTR_TIMEOUT => (int) env('DB_CONNECT_TIMEOUT', 5),
+        PDO::ATTR_PERSISTENT => (bool) env('DB_PERSISTENT', false),
+    ], static fn (mixed $value): bool => $value !== null)
+    : [];
+
+$mariadbRead = $replica('DB_READ');
+$mariadbWrite = $replica('DB_WRITE');
+
 return [
 
     /*
@@ -59,9 +94,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+            'options' => $connectionOptions(),
         ],
 
         'mariadb' => [
@@ -79,9 +112,9 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+            'options' => $connectionOptions(),
+            ...$mariadbRead === null ? [] : ['read' => $mariadbRead],
+            ...$mariadbWrite === null ? [] : ['write' => $mariadbWrite],
         ],
 
         'pgsql' => [
@@ -149,7 +182,11 @@ return [
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
-            'prefix' => env('REDIS_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-database-'),
+            'prefix' => env('REDIS_PREFIX', sprintf(
+                '%s-%s-database-',
+                Str::slug((string) env('APP_NAME', 'laravel')),
+                Str::slug((string) env('APP_ENV', 'production')),
+            )),
             'persistent' => env('REDIS_PERSISTENT', false),
         ],
 

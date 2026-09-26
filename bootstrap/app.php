@@ -17,24 +17,28 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(SecurityHeaders::class);
 
-        $trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
-        if ($trustedProxies !== '') {
-            $middleware->trustProxies(at: array_values(array_filter(array_map('trim', explode(',', $trustedProxies)))));
-        }
-
-        $trustedHosts = trim((string) env('TRUSTED_HOSTS', ''));
-        if ($trustedHosts !== '') {
-            $middleware->trustHosts(at: array_values(array_filter(array_map('trim', explode(',', $trustedHosts)))), subdomains: false);
-        }
+        /*
+         * Only the middleware *registration* belongs here. The trusted proxy
+         * and trusted host values themselves are applied by
+         * App\Providers\RuntimeTrustServiceProvider::boot().
+         *
+         * This callback is registered through Application::afterResolving(),
+         * so it runs while the container resolves the HTTP kernel — before
+         * the framework bootstrappers have loaded `.env` or cached
+         * configuration. Calling env() here silently returns the default and
+         * the configuration never takes effect.
+         *
+         * Registering TrustHosts is safe when no host pattern is configured:
+         * Illuminate\Http\Middleware\TrustHosts::shouldSpecifyTrustedHosts()
+         * makes it a no-op in the local environment and during tests, and
+         * otherwise falls back to the APP_URL host pattern.
+         */
+        $middleware->trustHosts();
 
         $middleware->alias([
             'active' => EnsureAccountIsActive::class,
             'role' => EnsureUserHasRole::class,
         ]);
-
-        if (env('CACHE_STORE', 'database') === 'redis') {
-            $middleware->throttleWithRedis();
-        }
 
         $middleware->redirectGuestsTo(static fn (Request $request): string => route('login'));
         $middleware->redirectUsersTo(static fn (Request $request): string => route('dashboard'));

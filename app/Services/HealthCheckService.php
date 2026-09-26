@@ -7,8 +7,35 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
 
+/**
+ * Runtime health reporting for the HTTP health endpoints.
+ *
+ * Liveness and readiness are deliberately separate:
+ *
+ *  - Liveness answers "is this PHP process able to serve a request at all".
+ *    It must not touch MariaDB or Redis. If it did, a dependency outage would
+ *    make every upstream report the whole application as dead and a load
+ *    balancer would remove all of it, turning a partial degradation into a
+ *    total outage.
+ *
+ *  - Readiness answers "can this process serve traffic right now", and does
+ *    check the dependencies that a request actually needs.
+ */
 class HealthCheckService
 {
+    /**
+     * @return array{status: string, checks: array<string, bool>}
+     */
+    public function liveness(): array
+    {
+        return [
+            'status' => 'ok',
+            'checks' => [
+                'php' => true,
+            ],
+        ];
+    }
+
     /**
      * @return array{healthy: bool, checks: array<string, bool>}
      */
@@ -80,7 +107,10 @@ class HealthCheckService
         }
 
         try {
-            DB::connection((string) config('queue.connections.database.connection'))->table((string) config('queue.connections.database.table', 'jobs'))->limit(1)->get();
+            DB::connection((string) config('queue.connections.database.connection'))
+                ->table((string) config('queue.connections.database.table', 'jobs'))
+                ->limit(1)
+                ->get();
 
             return true;
         } catch (Throwable) {

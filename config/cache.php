@@ -19,6 +19,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rate Limiter Store
+    |--------------------------------------------------------------------------
+    |
+    | The framework resolves the rate limiter backing store from this key. It
+    | falls back to the default store when null, so pointing it at a dedicated
+    | Redis store isolates authentication/throttling counters from cached
+    | payloads and survives a cache flush without resetting limits.
+    |
+    | Unlike middleware wiring in bootstrap/app.php, this value is read from
+    | the cached configuration and therefore behaves correctly under
+    | `php artisan config:cache` and `optimize`.
+    |
+    */
+
+    'limiter' => env('CACHE_LIMITER', env('CACHE_STORE', 'database')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Stores
     |--------------------------------------------------------------------------
     |
@@ -90,6 +108,12 @@ return [
             'lock_connection' => env('REDIS_CACHE_LOCK_CONNECTION', 'default'),
         ],
 
+        'rate_limits' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_RATE_LIMIT_CONNECTION', 'rate_limits'),
+            'lock_connection' => env('REDIS_RATE_LIMIT_LOCK_CONNECTION', 'default'),
+        ],
+
         'dynamodb' => [
             'driver' => 'dynamodb',
             'key' => env('AWS_ACCESS_KEY_ID'),
@@ -122,9 +146,19 @@ return [
     | stores, there might be other applications using the same cache. For
     | that reason, you may prefix every cache key to avoid collisions.
     |
+    | The default prefix is derived from both the application name and the
+    | environment name so that staging and production can safely share one
+    | Redis instance without overwriting each other's entries. Set
+    | CACHE_PREFIX explicitly when a single environment must address more
+    | than one application instance.
+    |
     */
 
-    'prefix' => env('CACHE_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-cache-'),
+    'prefix' => env('CACHE_PREFIX', sprintf(
+        '%s-%s-cache-',
+        Str::slug((string) env('APP_NAME', 'laravel')),
+        Str::slug((string) env('APP_ENV', 'production')),
+    )),
 
     /*
     |--------------------------------------------------------------------------

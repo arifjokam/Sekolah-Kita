@@ -68,8 +68,22 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'queue'),
             'queue' => env('REDIS_QUEUE', 'default'),
+            /*
+             * The job must be attempted again if it has been reserved for longer
+             * than this many seconds. It must stay strictly greater than the
+             * worker timeout so a slow job is never handed to a second worker
+             * while the first is still executing. `platform:readiness` fails
+             * closed when the configured worker timeout is not below this value.
+             */
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 180),
-            'block_for' => null,
+            /*
+             * Seconds a worker blocks waiting for new jobs. A bounded value keeps
+             * idle workers from busy-spinning against Redis under a
+             * multi-worker deployment.
+             */
+            'block_for' => env('REDIS_QUEUE_BLOCK_FOR') === null
+                ? null
+                : (int) env('REDIS_QUEUE_BLOCK_FOR'),
             'after_commit' => true,
         ],
 

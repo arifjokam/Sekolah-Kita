@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Services\UserSessionRegistry;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,6 +12,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureAccountIsActive
 {
+    public function __construct(private readonly UserSessionRegistry $sessionRegistry) {}
+
     /**
      * Ensure the authenticated account may use protected application areas.
      *
@@ -25,6 +28,8 @@ class EnsureAccountIsActive
         }
 
         if ($user->isActive() && $user->hasAssignedRole()) {
+            $this->sessionRegistry->registerCurrentSession($user, $request->session());
+
             return $next($request);
         }
 
