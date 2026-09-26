@@ -53,6 +53,7 @@ class Guardian extends Model
     {
         return $this->belongsToMany(Student::class, 'student_guardians')
             ->withPivot([
+                'id',
                 'relationship_type',
                 'is_primary_contact',
                 'is_emergency_contact',

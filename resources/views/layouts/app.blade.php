@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>@yield('title', 'Dashboard · Sekolah Kita')</title>
+        <title>@yield('title', 'Sekolah Kita')</title>
 
         @fonts
 
@@ -16,22 +16,50 @@
     </head>
     <body class="min-h-screen bg-slate-100 text-slate-900 antialiased">
         <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-sm focus:font-semibold focus:shadow-lg">Lewati ke konten utama</a>
-        <header class="border-b border-slate-200 bg-white">
-            <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-                <a href="{{ route('home') }}" class="inline-flex items-center gap-3 text-sm font-semibold tracking-wide text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2">
-                    <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-700 text-sm font-bold text-white">SK</span>
-                    <span>Sekolah Kita</span>
-                </a>
-                <div class="flex items-center gap-3">
-                    <a href="{{ route('home') }}" class="hidden text-sm font-medium text-slate-600 hover:text-cyan-700 sm:inline-flex">Lihat situs publik</a>
+
+        <header class="sticky top-0 z-30 border-b border-slate-200 bg-white">
+            <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+                <div class="flex min-w-0 items-center gap-3">
                     @auth
-                        <a href="{{ route('notifications.index') }}" class="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">
-                            Notifikasi
+                        <button
+                            type="button"
+                            data-sidebar-toggle
+                            aria-controls="app-sidebar"
+                            aria-expanded="false"
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 lg:hidden"
+                        >
+                            <span class="sr-only">Buka navigasi</span>
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="h-5 w-5" aria-hidden="true">
+                                <path d="M3 5h14M3 10h14M3 15h14" />
+                            </svg>
+                        </button>
+                    @endauth
+
+                    <a href="{{ route('home') }}" class="inline-flex min-w-0 items-center gap-3 text-sm font-semibold tracking-wide text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600 focus-visible:ring-offset-2">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-700 text-sm font-bold text-white">SK</span>
+                        <span class="hidden truncate sm:inline">Sekolah Kita</span>
+                    </a>
+                </div>
+
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <a href="{{ route('home') }}" class="hidden text-sm font-medium text-slate-600 hover:text-cyan-700 lg:inline-flex">Lihat situs publik</a>
+
+                    @auth
+                        <a href="{{ route('notifications.index') }}" class="relative inline-flex items-center rounded-lg px-2 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">
+                            <span class="sr-only">Notifikasi</span>
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5" aria-hidden="true">
+                                <path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3-1.5 4.5-1.5 4.5h12s-1.5-1.5-1.5-4.5A4.5 4.5 0 0 0 10 3ZM8 15.5a2 2 0 0 0 4 0" />
+                            </svg>
                             @if (($unreadNotificationCount ?? 0) > 0)
-                                <span class="rounded-full bg-cyan-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{{ $unreadNotificationCount }}</span>
+                                <span class="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-cyan-700 px-1 text-[10px] font-bold leading-4 text-white">{{ $unreadNotificationCount }}</span>
                             @endif
                         </a>
-                        <span class="hidden text-right text-xs text-slate-500 md:block">{{ auth()->user()->name }}<br><span class="font-medium text-slate-700">{{ auth()->user()->role?->label() }}</span></span>
+
+                        <span class="hidden text-right text-xs leading-4 text-slate-500 md:block">
+                            <span class="block max-w-[14rem] truncate font-semibold text-slate-800">{{ auth()->user()->name }}</span>
+                            {{ auth()->user()->role?->label() }}
+                        </span>
+
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Keluar</button>
@@ -39,29 +67,84 @@
                     @endauth
                 </div>
             </div>
-            @can('access-administrator-area')
-                <div class="border-t border-slate-100 bg-slate-50">
-                    <nav class="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6 lg:px-8" aria-label="Navigasi administrator">
-                        <a href="{{ route('admin.foundation') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.foundation') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Ringkasan</a>
-                        <a href="{{ route('admin.school-profile.edit') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.school-profile.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Profil sekolah</a>
-                        <a href="{{ route('admin.news.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.news.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Berita</a>
-                        <a href="{{ route('admin.achievements.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.achievements.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Prestasi</a>
-                        <a href="{{ route('admin.gallery-albums.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.gallery-albums.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Galeri</a>
-                        <a href="{{ route('admin.teachers.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.teachers.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Guru publik</a>
-                        <a href="{{ route('admin.contact-messages.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.contact-messages.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Pesan kontak</a>
-                        <a href="{{ route('admin.audit-logs.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.audit-logs.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">Audit log</a>
-                        <a href="{{ route('admin.ppdb.applications.index') }}" class="whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium {{ request()->routeIs('admin.ppdb.*') ? 'border-cyan-600 text-cyan-800' : 'border-transparent text-slate-600 hover:text-slate-950' }}">PPDB</a>
-                    </nav>
-                </div>
-            @endcan
         </header>
 
-        <main id="main-content" class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-            @if (session('status'))
-                <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">{{ session('status') }}</div>
-            @endif
-            @yield('content')
-        </main>
+        @auth
+            {{-- Off-canvas scrim for the mobile drawer. Hidden by default and shown by the toggle. --}}
+            <div data-sidebar-overlay hidden class="fixed inset-0 z-40 bg-slate-900/40 lg:hidden"></div>
+        @endauth
+
+        <div class="mx-auto flex w-full max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:px-8">
+            @auth
+                <aside
+                    id="app-sidebar"
+                    data-sidebar
+                    class="fixed inset-y-0 left-0 z-50 w-72 -translate-x-full overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 transition-transform lg:sticky lg:top-24 lg:z-auto lg:h-[calc(100vh-7rem)] lg:w-64 lg:shrink-0 lg:translate-x-0 lg:border-r-0 lg:bg-transparent lg:px-0 lg:py-0"
+                    aria-label="Navigasi area kerja"
+                >
+                    <div class="lg:sticky lg:top-0">
+                        {{--
+                            The admin shell is gated, not role-matched. @role is a
+                            Spatie directive that this application does not have,
+                            so an unknown directive would silently render the
+                            whole administrator navigation for every account.
+                        --}}
+                        @if (auth()->user()?->can('access-administrator-area'))
+                            <x-admin.navigation />
+                        @else
+                            <nav class="space-y-1" aria-label="Navigasi akun">
+                                <a
+                                    href="{{ route('dashboard') }}"
+                                    @if (request()->routeIs('dashboard.*')) aria-current="page" @endif
+                                    class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs('dashboard.*') ? 'bg-cyan-50 text-cyan-900' : 'text-slate-700 hover:bg-slate-100' }}"
+                                >Dashboard</a>
+                                @if (auth()->user()?->isGuru())
+                                    <a
+                                        href="{{ route('guru.classes.index') }}"
+                                        @if (request()->routeIs('guru.classes.*')) aria-current="page" @endif
+                                        class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs('guru.classes.*') ? 'bg-cyan-50 text-cyan-900' : 'text-slate-700 hover:bg-slate-100' }}"
+                                    >Kelas saya</a>
+                                @endif
+                                <a
+                                    href="{{ route('notifications.index') }}"
+                                    @if (request()->routeIs('notifications.*')) aria-current="page" @endif
+                                    class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.*') ? 'bg-cyan-50 text-cyan-900' : 'text-slate-700 hover:bg-slate-100' }}"
+                                >Notifikasi</a>
+                                <a href="{{ route('home') }}" class="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Situs publik</a>
+                            </nav>
+                        @endif
+                    </div>
+                </aside>
+            @endauth
+
+            <main id="main-content" class="min-w-0 flex-1">
+                @if (session('status'))
+                    <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">{{ session('status') }}</div>
+                @endif
+
+                @isset($breadcrumbs)
+                    <nav aria-label="Remah roti" class="mb-4">
+                        <ol class="flex flex-wrap items-center gap-1 text-sm text-slate-500">
+                            @foreach ($breadcrumbs as $crumb)
+                                <li class="flex items-center gap-1">
+                                    @if (! $loop->first)
+                                        <span aria-hidden="true" class="text-slate-300">/</span>
+                                    @endif
+                                    @if (! $loop->last && ! empty($crumb['route']))
+                                        <a href="{{ route($crumb['route'], $crumb['params'] ?? []) }}" class="font-medium hover:text-cyan-700">{{ $crumb['label'] }}</a>
+                                    @else
+                                        <span class="font-medium text-slate-700" @if ($loop->last) aria-current="page" @endif>{{ $crumb['label'] }}</span>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ol>
+                    </nav>
+                @endisset
+
+                @yield('content')
+            </main>
+        </div>
+
         @stack('scripts')
     </body>
 </html>

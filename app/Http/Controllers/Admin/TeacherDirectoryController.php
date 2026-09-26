@@ -23,14 +23,14 @@ class TeacherDirectoryController extends Controller
             ->orderBy('id')
             ->paginate(20);
 
-        return view('admin.teachers.index', compact('teachers'));
+        return view('admin.teacher-directory.index', compact('teachers'));
     }
 
     public function edit(Teacher $teacher): View
     {
         Gate::authorize('managePublicProfile', $teacher);
 
-        return view('admin.teachers.form', compact('teacher'));
+        return view('admin.teacher-directory.form', compact('teacher'));
     }
 
     public function update(
@@ -48,7 +48,7 @@ class TeacherDirectoryController extends Controller
         );
 
         return redirect()
-            ->route('admin.teachers.index')
+            ->route('admin.teacher-directory.index')
             ->with('status', 'Profil publik guru berhasil diperbarui.');
     }
 

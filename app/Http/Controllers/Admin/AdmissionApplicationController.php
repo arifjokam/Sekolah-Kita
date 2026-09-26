@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AdmissionApplicationStatus;
+use App\Enums\AdmissionConversionStatus;
 use App\Enums\AdmissionReviewDecision;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AssignAdmissionReviewerRequest;
@@ -10,6 +11,7 @@ use App\Http\Requests\DecideAdmissionApplicationRequest;
 use App\Http\Requests\RequestAdmissionRevisionRequest;
 use App\Http\Requests\ReviewAdmissionApplicationRequest;
 use App\Models\AdmissionApplication;
+use App\Models\AdmissionPeriod;
 use App\Models\ClassModel;
 use App\Models\User;
 use App\Services\AdmissionApplicationService;
@@ -26,29 +28,90 @@ class AdmissionApplicationController extends Controller
     {
         Gate::authorize('viewAny', AdmissionApplication::class);
 
+        return view('admin.ppdb.applications.index', $this->queue($request, 'admin.ppdb.applications.index'));
+    }
+
+    /**
+     * The reviewer's working queue.
+     *
+     * Same records as the full list, ordered so that everything waiting for a
+     * decision is reachable in one place and the conversion backlog is visible
+     * without a separate screen.
+     */
+    public function review(Request $request): View
+    {
+        Gate::authorize('viewAny', AdmissionApplication::class);
+
+        return view('admin.ppdb.applications.review', $this->queue($request, 'admin.ppdb.review.index'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function queue(Request $request, string $view): array
+    {
+        $statusFilter = $request->string('status')->toString();
+        $onlyActionable = $request->boolean('actionable');
+        $search = trim($request->string('search')->toString());
+
         $applications = AdmissionApplication::query()
             ->select([
                 'id',
                 'admission_period_id',
                 'assigned_reviewer_user_id',
                 'registration_number',
+                'applicant_name',
                 'status',
+                'conversion_status',
                 'duplicate_flag',
                 'submitted_at',
             ])
             ->with(['period:id,name', 'reviewer:id,name'])
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->toString()))
+            ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter))
+            ->when($onlyActionable, fn ($query) => $query->whereIn('status', [
+                AdmissionApplicationStatus::Submitted->value,
+                AdmissionApplicationStatus::UnderReview->value,
+            ]))
             ->when($request->filled('period'), fn ($query) => $query->where('admission_period_id', $request->integer('period')))
             ->when($request->filled('reviewer'), fn ($query) => $query->where('assigned_reviewer_user_id', $request->integer('reviewer')))
+            ->when($search !== '', function ($query) use ($search): void {
+                $like = '%'.addcslashes($search, '%_\\').'%';
+                $query->where(function ($query) use ($like): void {
+                    $query->where('registration_number', 'like', $like)
+                        ->orWhere('applicant_name', 'like', $like);
+                });
+            })
             ->orderByDesc('submitted_at')
             ->orderByDesc('id')
             ->paginate(20)
             ->withQueryString();
 
-        return view('admin.ppdb.applications.index', [
+        return [
             'applications' => $applications,
             'statuses' => AdmissionApplicationStatus::cases(),
-        ]);
+            'periods' => AdmissionPeriod::query()->orderByDesc('opens_at')->get(['id', 'name']),
+            'reviewers' => User::query()
+                ->where('role', 'administrator')
+                ->where('status', 'active')
+                ->whereNotNull('email_verified_at')
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'summary' => [
+                'total' => AdmissionApplication::query()->count(),
+                'awaitingReview' => AdmissionApplication::query()
+                    ->whereIn('status', [
+                        AdmissionApplicationStatus::Submitted->value,
+                        AdmissionApplicationStatus::UnderReview->value,
+                    ])
+                    ->count(),
+                'acceptedPendingConversion' => AdmissionApplication::query()
+                    ->where('status', AdmissionApplicationStatus::Accepted->value)
+                    ->where('conversion_status', '!=', AdmissionConversionStatus::Completed->value)
+                    ->count(),
+                'duplicates' => AdmissionApplication::query()->where('duplicate_flag', true)->count(),
+            ],
+            'queueRoute' => $view,
+        ];
     }
 
     public function show(Request $request, AdmissionApplication $admissionApplication, AuditLogService $audit): View

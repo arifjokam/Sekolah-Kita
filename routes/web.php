@@ -1,16 +1,25 @@
 <?php
 
+use App\Http\Controllers\Admin\AcademicYearController as AdminAcademicYearController;
 use App\Http\Controllers\Admin\AchievementController as AdminAchievementController;
 use App\Http\Controllers\Admin\AdmissionApplicationController as AdminAdmissionApplicationController;
 use App\Http\Controllers\Admin\AdmissionDocumentController as AdminAdmissionDocumentController;
 use App\Http\Controllers\Admin\AdmissionPeriodController as AdminAdmissionPeriodController;
+use App\Http\Controllers\Admin\ClassController as AdminClassController;
+use App\Http\Controllers\Admin\ClassTeacherAssignmentController as AdminClassTeacherAssignmentController;
 use App\Http\Controllers\Admin\ContactMessageController as AdminContactMessageController;
+use App\Http\Controllers\Admin\EnrollmentController as AdminEnrollmentController;
 use App\Http\Controllers\Admin\GalleryAlbumController as AdminGalleryAlbumController;
 use App\Http\Controllers\Admin\GalleryItemController as AdminGalleryItemController;
 use App\Http\Controllers\Admin\NewsArticleController as AdminNewsArticleController;
 use App\Http\Controllers\Admin\NewsArticleImageController as AdminNewsArticleImageController;
 use App\Http\Controllers\Admin\SchoolProfileController as AdminSchoolProfileController;
+use App\Http\Controllers\Admin\StudentController as AdminStudentController;
+use App\Http\Controllers\Admin\SubjectController as AdminSubjectController;
+use App\Http\Controllers\Admin\TeacherController as AdminTeacherController;
 use App\Http\Controllers\Admin\TeacherDirectoryController as AdminTeacherDirectoryController;
+use App\Http\Controllers\Admin\TeachingAssignmentController as AdminTeachingAssignmentController;
+use App\Http\Controllers\Admin\TermController as AdminTermController;
 use App\Http\Controllers\AdministratorFoundationController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
@@ -29,8 +38,17 @@ use App\Http\Controllers\Public\HomeController;
 use App\Http\Controllers\Public\NewsArticleController;
 use App\Http\Controllers\Public\SchoolProfileController;
 use App\Http\Controllers\Public\TeacherDirectoryController;
+use App\Http\Controllers\TeacherWorkspaceController;
 use Illuminate\Support\Facades\Route;
 
+/*
+| Role landing pages.
+|
+| A role has one canonical home so the authenticated layout, the breadcrumb
+| trail and the "back to start" affordance are never ambiguous. The shared
+| /dashboard route still exists and renders the same views, which keeps the
+| post-login redirect in AuthenticatedSessionController stable.
+*/
 Route::get('/', HomeController::class)->name('home');
 Route::get('/health', [HealthController::class, 'live'])->name('health.live');
 Route::get('/health/ready', [HealthController::class, 'ready'])->name('health.ready');
@@ -41,6 +59,22 @@ Route::get('/prestasi', [AchievementController::class, 'index'])->name('achievem
 Route::get('/prestasi/{slug}', [AchievementController::class, 'show'])->name('achievements.show');
 Route::get('/galeri', [GalleryController::class, 'index'])->name('gallery.index');
 Route::get('/galeri/{slug}', [GalleryController::class, 'show'])->name('gallery.show');
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:guru'])->group(function (): void {
+    /*
+    | The teacher's own workspace.
+    |
+    | A teacher is not an administrator, so the class roster they are allowed to
+    | see is exposed here. ClassPolicy::view and ClassPolicy::viewRoster resolve
+    | the scope from the teacher's own assignments.
+    |
+    | This group is declared before the public /guru/{slug} directory route on
+    | purpose: "/guru/kelas" is a static segment, and the directory wildcard
+    | would otherwise capture it and return a 404.
+    */
+    Route::get('/guru/kelas', [TeacherWorkspaceController::class, 'classes'])->name('guru.classes.index');
+    Route::get('/guru/kelas/{class}', [TeacherWorkspaceController::class, 'show'])->name('guru.classes.show');
+});
+
 Route::get('/guru', [TeacherDirectoryController::class, 'index'])->name('teachers.index');
 Route::get('/guru/{slug}', [TeacherDirectoryController::class, 'show'])->name('teachers.show');
 Route::get('/kontak', [ContactController::class, 'create'])->name('contact.create');
@@ -94,10 +128,46 @@ Route::middleware(['auth', 'auth.session', 'active'])->group(function (): void {
 });
 
 Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administrator,guru,siswa'])->group(function (): void {
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    /*
+    | The shared entry point. It resolves the role landing page from the
+    | session so the post-login redirect in AuthenticatedSessionController
+    | stays stable.
+    */
+    Route::get('/dashboard', [DashboardController::class, 'redirectToRoleDashboard'])->name('dashboard');
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
     Route::put('/notifications/preferences', [NotificationController::class, 'updatePreference'])->name('notifications.preferences.update');
+});
+
+/*
+| Role landing pages.
+|
+| Each role owns a canonical URL, and the role middleware keeps a guru from
+| opening the student landing page even though the underlying payload is scoped
+| to the requesting account anyway.
+*/
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administrator'])
+    ->get('/dashboard/administrator', [DashboardController::class, 'index'])
+    ->name('dashboard.administrator');
+
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:guru'])
+    ->get('/dashboard/guru', [DashboardController::class, 'index'])
+    ->name('dashboard.guru');
+
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:siswa'])
+    ->get('/dashboard/siswa', [DashboardController::class, 'index'])
+    ->name('dashboard.siswa');
+
+Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:guru'])->group(function (): void {
+    /*
+    | The teacher's own workspace.
+    |
+    | A teacher is not an administrator, so the class roster they are allowed to
+    | see is exposed here. ClassPolicy::view and ClassPolicy::viewRoster resolve
+    | the scope from the teacher's own assignments.
+    */
+    Route::get('/guru/kelas', [TeacherWorkspaceController::class, 'classes'])->name('guru.classes.index');
+    Route::get('/guru/kelas/{class}', [TeacherWorkspaceController::class, 'show'])->name('guru.classes.show');
 });
 
 Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administrator'])
@@ -147,11 +217,68 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
         Route::post('/gallery-albums/{galleryAlbum}/items/{galleryItem}/archive', [AdminGalleryItemController::class, 'archive'])->name('gallery-albums.items.archive');
     });
 
-    Route::get('/teachers/public', [AdminTeacherDirectoryController::class, 'index'])->name('teachers.index');
-    Route::get('/teachers/public/{teacher}/edit', [AdminTeacherDirectoryController::class, 'edit'])->name('teachers.edit');
-    Route::put('/teachers/public/{teacher}', [AdminTeacherDirectoryController::class, 'update'])->name('teachers.update');
-    Route::post('/teachers/public/{teacher}/publish', [AdminTeacherDirectoryController::class, 'publish'])->name('teachers.publish');
-    Route::post('/teachers/public/{teacher}/unpublish', [AdminTeacherDirectoryController::class, 'unpublish'])->name('teachers.unpublish');
+    Route::get('/teacher-directory', [AdminTeacherDirectoryController::class, 'index'])->name('teacher-directory.index');
+    Route::get('/teacher-directory/{teacher}/edit', [AdminTeacherDirectoryController::class, 'edit'])->name('teacher-directory.edit');
+    Route::put('/teacher-directory/{teacher}', [AdminTeacherDirectoryController::class, 'update'])->name('teacher-directory.update');
+    Route::post('/teacher-directory/{teacher}/publish', [AdminTeacherDirectoryController::class, 'publish'])->name('teacher-directory.publish');
+    Route::post('/teacher-directory/{teacher}/unpublish', [AdminTeacherDirectoryController::class, 'unpublish'])->name('teacher-directory.unpublish');
+
+    /*
+    | Master data. Every resource is guarded by its own policy inside the
+    | controllers and form requests, so the route table and the authorization
+    | rules stay independently reviewable.
+    */
+    Route::resource('teachers', AdminTeacherController::class)
+        ->parameters(['teachers' => 'teacher'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+    Route::patch('/teachers/{teacher}/employment-status', [AdminTeacherController::class, 'updateEmploymentStatus'])
+        ->name('teachers.employment-status.update');
+
+    Route::resource('students', AdminStudentController::class)
+        ->parameters(['students' => 'student'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+    Route::patch('/students/{student}/lifecycle-status', [AdminStudentController::class, 'updateLifecycleStatus'])
+        ->name('students.lifecycle-status.update');
+    Route::post('/students/{student}/guardians', [AdminStudentController::class, 'storeGuardian'])
+        ->name('students.guardians.store');
+    Route::delete('/students/{student}/guardians/{studentGuardian}', [AdminStudentController::class, 'destroyGuardian'])
+        ->name('students.guardians.destroy');
+
+    Route::resource('academic-years', AdminAcademicYearController::class)
+        ->parameters(['academic-years' => 'academicYear'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+    Route::patch('/academic-years/{academicYear}/status', [AdminAcademicYearController::class, 'updateStatus'])
+        ->name('academic-years.status.update');
+
+    Route::resource('terms', AdminTermController::class)
+        ->only(['index', 'create', 'store', 'edit', 'update']);
+    Route::patch('/terms/{term}/status', [AdminTermController::class, 'updateStatus'])->name('terms.status.update');
+
+    Route::resource('classes', AdminClassController::class)
+        ->parameters(['classes' => 'class'])
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+    Route::patch('/classes/{class}/status', [AdminClassController::class, 'updateStatus'])->name('classes.status.update');
+
+    Route::resource('subjects', AdminSubjectController::class)
+        ->only(['index', 'create', 'store', 'edit', 'update']);
+    Route::patch('/subjects/{subject}/status', [AdminSubjectController::class, 'updateStatus'])->name('subjects.status.update');
+
+    Route::resource('teaching-assignments', AdminTeachingAssignmentController::class)
+        ->parameters(['teaching-assignments' => 'teachingAssignment'])
+        ->only(['index', 'create', 'store', 'edit', 'update']);
+    Route::patch('/teaching-assignments/{teachingAssignment}/status', [AdminTeachingAssignmentController::class, 'updateStatus'])
+        ->name('teaching-assignments.status.update');
+
+    Route::resource('class-teacher-assignments', AdminClassTeacherAssignmentController::class)
+        ->parameters(['class-teacher-assignments' => 'classTeacherAssignment'])
+        ->only(['index', 'create', 'store', 'edit', 'update']);
+    Route::patch('/class-teacher-assignments/{classTeacherAssignment}/status', [AdminClassTeacherAssignmentController::class, 'updateStatus'])
+        ->name('class-teacher-assignments.status.update');
+
+    Route::resource('enrollments', AdminEnrollmentController::class)
+        ->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+    Route::post('/enrollments/{enrollment}/transfer', [AdminEnrollmentController::class, 'transfer'])
+        ->name('enrollments.transfer');
 
     Route::get('/contact-messages', [AdminContactMessageController::class, 'index'])->name('contact-messages.index');
     Route::get('/contact-messages/{contactMessage}', [AdminContactMessageController::class, 'show'])->name('contact-messages.show');
@@ -164,6 +291,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
         Route::get('/', [AdminAdmissionPeriodController::class, 'index'])->name('index');
         Route::get('/create', [AdminAdmissionPeriodController::class, 'create'])->name('create');
         Route::post('/', [AdminAdmissionPeriodController::class, 'store'])->name('store');
+        Route::get('/{admissionPeriod}', [AdminAdmissionPeriodController::class, 'show'])->name('show');
         Route::get('/{admissionPeriod}/edit', [AdminAdmissionPeriodController::class, 'edit'])->name('edit');
         Route::put('/{admissionPeriod}', [AdminAdmissionPeriodController::class, 'update'])->name('update');
     });
@@ -172,6 +300,7 @@ Route::middleware(['auth', 'auth.session', 'active', 'verified', 'role:administr
     Route::post('/ppdb/periods/{admissionPeriod}/archive', [AdminAdmissionPeriodController::class, 'archive'])->name('ppdb.periods.archive');
 
     Route::get('/ppdb/applications', [AdminAdmissionApplicationController::class, 'index'])->name('ppdb.applications.index');
+    Route::get('/ppdb/review', [AdminAdmissionApplicationController::class, 'review'])->name('ppdb.review.index');
     Route::get('/ppdb/applications/{admissionApplication}', [AdminAdmissionApplicationController::class, 'show'])->name('ppdb.applications.show');
     Route::post('/ppdb/applications/{admissionApplication}/reviewer', [AdminAdmissionApplicationController::class, 'assign'])->name('ppdb.applications.reviewer.assign');
     Route::post('/ppdb/applications/{admissionApplication}/start-review', [AdminAdmissionApplicationController::class, 'start'])->name('ppdb.applications.start-review');

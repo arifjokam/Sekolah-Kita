@@ -17,10 +17,6 @@
         "@laravel/multiplex": "^0.4.1"
     },
     "dependencies": {
-        "@tiptap/core": "^3.31.3",
-        "@tiptap/extension-image": "^3.31.3",
-        "@tiptap/extension-placeholder": "^3.31.3",
-        "@tiptap/extension-text-align": "^3.31.3",
-        "@tiptap/starter-kit": "^3.31.3"
+        "ckeditor5": "^48.5.2"
     }
 }

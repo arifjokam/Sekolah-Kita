@@ -21,4 +21,14 @@ export default defineConfig({
             ignored: ['**/storage/framework/views/**'],
         },
     },
+    /*
+     * CKEditor 5 is a large dependency, but it is only ever loaded on the few
+     * administrator screens that carry a long form editor, through the dynamic
+     * import in resources/js/app.js. The chunk is intentionally big, so the
+     * default warning is silenced rather than left to hide real regressions in
+     * the small entry chunk.
+     */
+    build: {
+        chunkSizeWarningLimit: 1024,
+    },
 });

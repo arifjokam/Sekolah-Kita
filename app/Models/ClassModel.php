@@ -40,17 +40,20 @@ class ClassModel extends Model
 
     public function enrollments(): HasMany
     {
-        return $this->hasMany(Enrollment::class);
+        // The foreign key is named explicitly because the class basename
+        // (ClassModel) does not produce the "class_id" column Laravel would
+        // otherwise infer.
+        return $this->hasMany(Enrollment::class, 'class_id');
     }
 
     public function classTeacherAssignments(): HasMany
     {
-        return $this->hasMany(ClassTeacherAssignment::class);
+        return $this->hasMany(ClassTeacherAssignment::class, 'class_id');
     }
 
     public function teachingAssignments(): HasMany
     {
-        return $this->hasMany(TeachingAssignment::class);
+        return $this->hasMany(TeachingAssignment::class, 'class_id');
     }
 
     public function activeEnrollments(): HasMany

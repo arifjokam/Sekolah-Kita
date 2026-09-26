@@ -74,6 +74,7 @@ class Student extends Model
     {
         return $this->belongsToMany(Guardian::class, 'student_guardians')
             ->withPivot([
+                'id',
                 'relationship_type',
                 'is_primary_contact',
                 'is_emergency_contact',

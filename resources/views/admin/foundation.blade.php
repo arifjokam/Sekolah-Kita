@@ -1,19 +1,46 @@
 @extends('layouts.app')
 
-@section('title', 'Ringkasan administrator · Sekolah Kita')
+@section('title', 'Area administrator · Sekolah Kita')
 
 @section('content')
-    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Area administrator</p>
-        <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950">Kelola website sekolah</h1>
-        <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Publication workflow untuk konten publik, direktori guru, profil sekolah, galeri, dan pesan kontak. Konten berstatus draf tidak tampil di website publik.</p>
-        <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <a href="{{ route('admin.school-profile.edit') }}" class="rounded-2xl border border-slate-200 p-5 transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"><p class="font-semibold text-slate-950">Profil sekolah</p><p class="mt-2 text-sm text-slate-600">Identitas, kontak, visi, misi, dan gambar utama.</p></a>
-            <a href="{{ route('admin.news.index') }}" class="rounded-2xl border border-slate-200 p-5 transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"><p class="font-semibold text-slate-950">Berita</p><p class="mt-2 text-sm text-slate-600">Tulis, terbitkan, dan arsipkan berita.</p></a>
-            <a href="{{ route('admin.achievements.index') }}" class="rounded-2xl border border-slate-200 p-5 transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"><p class="font-semibold text-slate-950">Prestasi</p><p class="mt-2 text-sm text-slate-600">Publikasikan informasi prestasi yang anonim dan aman.</p></a>
-            <a href="{{ route('admin.gallery-albums.index') }}" class="rounded-2xl border border-slate-200 p-5 transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"><p class="font-semibold text-slate-950">Galeri</p><p class="mt-2 text-sm text-slate-600">Kelola album dan media yang telah ditinjau.</p></a>
-            <a href="{{ route('admin.teachers.index') }}" class="rounded-2xl border border-slate-200 p-5 transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"><p class="font-semibold text-slate-950">Guru publik</p><p class="mt-2 text-sm text-slate-600">Atur profil profesional tanpa membuka data privat.</p></a>
-            <a href="{{ route('admin.contact-messages.index') }}" class="rounded-2xl border border-slate-200 p-5 transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"><p class="font-semibold text-slate-950">Pesan kontak</p><p class="mt-2 text-sm text-slate-600">Tinjau pesan yang dikirim melalui situs publik.</p></a>
-        </div>
+    @php
+        $breadcrumbs = [
+            ['label' => 'Dashboard', 'route' => 'dashboard.administrator'],
+            ['label' => 'Ringkasan administrator'],
+        ];
+
+        $entries = [
+            ['label' => 'Tahun ajaran', 'description' => 'Fondasi seluruh data akademik dan satu-satunya tahun ajaran aktif.', 'route' => 'admin.academic-years.index'],
+            ['label' => 'Kelas', 'description' => 'Rombongan belajar per tahun ajaran beserta wali danmuridnya.', 'route' => 'admin.classes.index'],
+            ['label' => 'Guru', 'description' => 'Data kepegawaian guru dan status akses portalnya.', 'route' => 'admin.teachers.index'],
+            ['label' => 'Siswa', 'description' => 'Data siswa, wali, dan penempatan kelas.', 'route' => 'admin.students.index'],
+            ['label' => 'Mata pelajaran', 'description' => 'Daftar pelajaran yang dipakai pada assignment mengajar.', 'route' => 'admin.subjects.index'],
+            ['label' => 'Assignment', 'description' => 'Penugasan guru mengajar dan wali kelas.', 'route' => 'admin.teaching-assignments.index'],
+            ['label' => 'Periode PPDB', 'description' => 'Jendela pendaftaran dan kuota penerimaan.', 'route' => 'admin.ppdb.periods.index'],
+            ['label' => 'Review PPDB', 'description' => 'Antrean keputusan dan konversi pendaftar menjadi siswa.', 'route' => 'admin.ppdb.review.index'],
+            ['label' => 'Berita', 'description' => 'Tulis, terbitkan, dan arsipkan berita sekolah.', 'route' => 'admin.news.index'],
+            ['label' => 'Profil sekolah', 'description' => 'Identitas, kontak, visi, dan misi sekolah.', 'route' => 'admin.school-profile.edit'],
+            ['label' => 'Audit log', 'description' => 'Jejak audit setiap perubahan administrasi.', 'route' => 'admin.audit-logs.index'],
+        ];
+    @endphp
+
+    <x-admin.page-header
+        eyebrow="Area administrator"
+        title="Kelola Sekolah Kita"
+        description="Semua modul sekolah dalam satu tempat. Gunakan navigasi di samping untuk berpindah modul, atau pilih pintasan di bawah."
+    />
+
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        @foreach ($entries as $entry)
+            @if (Route::has($entry['route']))
+                <a
+                    href="{{ route($entry['route']) }}"
+                    class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600"
+                >
+                    <p class="font-semibold text-slate-950">{{ $entry['label'] }}</p>
+                    <p class="mt-2 text-sm leading-6 text-slate-600">{{ $entry['description'] }}</p>
+                </a>
+            @endif
+        @endforeach
     </div>
 @endsection

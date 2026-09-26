@@ -9,7 +9,7 @@ didukung, alur unggah gambar, sanitasi, batas unggah, dan otorisasinya.
 
 | Aspek | Nilai |
 | --- | --- |
-| Penyunting | Tiptap 3 (framework agnostic, `@tiptap/core`) |
+| Penyunting | CKEditor 5 (paket resmi `ckeditor5`, lisensi GPL) |
 | Penyimpanan | Kolom `news_articles.body` (TEXT, maks. 65.535 byte) |
 | Sanitasi | `symfony/html-sanitizer` di server, sebelum dan saat pembacaan |
 | Unggah gambar | Endpoint JSON khusus, melalui `MediaAssetService` |
@@ -57,6 +57,65 @@ Aturan tambahan:
 
 Markdown tidak tersedia, dan `code block` sengaja dimatikan karena tidak ada
 dalam allowlist.
+
+### 2.1 Integrasi CKEditor 5
+
+Editor dimuat lewat dynamic import dari `resources/js/app.js`, jadi bundelnya
+tidak masuk ke halaman publik maupun halaman admin yang tidak punya penyunting.
+Modulnya ada di `resources/js/editor/rich-text-editor.js` (bootstrap editor) dan
+`resources/js/editor/normalize-rich-text.js` (normalisasi markup, tanpa import
+editor sehingga bisa diuji terpisah).
+
+Paket yang dipakai adalah `ckeditor5` versi 48, paket resmi yang menyatukan
+seluruh paket CKEditor pada versi yang sama. Hanya fitur sumber terbuka yang
+dipakai; tidak ada dependensi premium dan tidak ada lisensi berbayar.
+
+Bilah alat yang tersedia:
+
+| Kelompok | Isi |
+| --- | --- |
+| Riwayat | `undo`, `redo` |
+| Blok | dropdown `heading` (paragraf, judul 2, judul 3, judul 4) |
+| Teks | `bold`, `italic`, `underline`, `strikethrough`, `removeFormat` |
+| Tautan | `link` |
+| Daftar | `bulletedList`, `numberedList`, `outdent`, `indent` (daftar bersarang) |
+| Blok lain | `blockQuote`, `horizontalLine` |
+| Gambar | `imageUpload` (unggah ke server), `insertImage` (sisipkan URL) |
+| Perataan | kiri, tengah, kanan, rata kiri kanan |
+| Layar | `fullscreen` |
+
+Bilah alat otomatis meluber ke menu dropdown pada layar sempit, dan area
+penyunting memakai `min-height` yang lega. Opsi `label` pada konfigurasi editor
+mendaftarkan penyunting sebagai field yang benar-benar berlabel untuk pembaca
+layar, dan opsi `placeholder` menampilkan teks bayangan saat isinya kosong.
+
+Progressive enhancement: textarea tetap adalah field yang dikirim, dan
+textarea itu baru disembunyikan setelah permukaan CKEditor benar-benar terpasang.
+Kalau JavaScript gagal dimuat atau editor gagal attaches, operator tetap
+mendapat textarea biasa yang berlabel dan tetap bisa menyimpan.
+
+Fitur yang sengaja tidak diaktifkan: ukuran font, jenis font, warna font, dan
+sorotan. Semuanya disimpan CKEditor sebagai inline `style`, sedangkan allowlist
+server menolak setiap atribut `style`. Menaktifkannya hanya akan membuat format
+yang hilang diam-diam setelah disimpan, jadi tombolnya lebih baik tidak ada.
+
+### 2.2 Normalisasi sebelum disimpan
+
+CKEditor menulis `style="text-align: …"`, membungkus gambar blok dengan
+`<figure>`, dan dapat menyertakan `<figcaption>`. Allowlist server tidak
+menerima semuanya, jadi `normalizeForStorage()` menyusun ulang markup sebelum
+dikirim:
+
+- `<figcaption>` menjadi paragraf biasa, sehingga teks keterangan tidak hilang;
+- `<figure>`, `<span>`, `<div>`, `<section>`, `<article>` dibuka isinya;
+- `text-align` pada `style` menjadi `data-align` dengan nilai yang sudah
+  dibatasi; deklarasi `style` lain dibuang seluruhnya;
+- `class` dibuang;
+- `script`, `style`, `iframe`, `object`, `embed` dibuang.
+
+Karena itu allowlist server tidak perlu dilonggarkan sama sekali, dan hasil
+normalisasi tetap disanitasi ulang di server ketika disimpan maupun ketika
+dibaca.
 
 ---
 
