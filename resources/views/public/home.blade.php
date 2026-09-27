@@ -8,7 +8,12 @@
             <div class="max-w-3xl">
                 <p class="text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300">Selamat datang</p>
                 <h1 class="mt-5 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">{{ $siteProfile['name'] ?? 'Sekolah Kita' }}</h1>
-                <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">{{ $siteProfile['about'] ?? 'Temukan informasi, kegiatan, dan prestasi sekolah dalam satu tempat.' }}</p>
+                {{--
+                    The homepage shows a single teaser line, so the about text is
+                    always escaped here even when the profile page renders it as
+                    rich text. Markup never reaches this slot.
+                --}}
+                <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">{{ $siteProfile['about']['teaser'] ?? 'Temukan informasi, kegiatan, dan prestasi sekolah dalam satu tempat.' }}</p>
                 <div class="mt-8 flex flex-wrap gap-3">
                     <a href="{{ route('school-profile.show') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">Kenali sekolah kami</a>
                     <a href="{{ route('news.index') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/50 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">Lihat berita</a>

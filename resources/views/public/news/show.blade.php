@@ -17,7 +17,11 @@
                 <img src="{{ $article['cover']['url'] }}" alt="Gambar utama berita sekolah" class="mt-10 aspect-[16/8] w-full rounded-3xl object-cover shadow-sm" width="{{ $article['cover']['width'] }}" height="{{ $article['cover']['height'] }}">
             @endif
             <div class="mt-10 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
-                <x-public.prose :text="$article['body']" />
+                @if (($article['body_html'] ?? null))
+                    <x-public.rich-text :html="$article['body_html']" />
+                @else
+                    <x-public.prose :text="$article['body']" />
+                @endif
             </div>
         </article>
         <div class="mt-8"><a href="{{ route('news.index') }}" class="text-sm font-semibold text-cyan-700 hover:text-cyan-900">← Kembali ke semua berita</a></div>

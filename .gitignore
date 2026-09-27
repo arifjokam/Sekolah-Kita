@@ -20,7 +20,11 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/dump.rdb
+/test-results
 /vendor
+/storage/framework/testing/.chromium-debs
+/storage/framework/testing/chromium-libs
 _ide_helper.php
 Homestead.json
 Homestead.yaml

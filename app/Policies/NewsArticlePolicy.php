@@ -42,6 +42,17 @@ class NewsArticlePolicy
         return $this->manages($user);
     }
 
+    /**
+     * Uploading an image for the article body.
+     *
+     * The article is optional because the create screen uploads before the
+     * article row exists; the ability is the same either way.
+     */
+    public function uploadBodyImage(User $user, ?NewsArticle $newsArticle = null): bool
+    {
+        return $this->manages($user);
+    }
+
     public function delete(User $user, NewsArticle $newsArticle): bool
     {
         return false;

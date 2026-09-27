@@ -199,11 +199,11 @@ class MediaPrivacyTest extends TestCase
             ->assertOk()
             ->assertSee($photo->public_object_key, false);
 
-        $this->actingAs($admin)->put(route('admin.teachers.update', $teacher), [
+        $this->actingAs($admin)->put(route('admin.teacher-directory.update', $teacher), [
             'directory_slug' => $teacher->directory_slug,
             'position_title' => $teacher->position_title,
             'remove_photo' => '1',
-        ])->assertRedirect(route('admin.teachers.index'));
+        ])->assertRedirect(route('admin.teacher-directory.index'));
 
         $this->assertNull($teacher->refresh()->photo_media_id);
         $photo->refresh();

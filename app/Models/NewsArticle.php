@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'author_user_id',
@@ -41,6 +42,16 @@ class NewsArticle extends Model
     public function coverMedia(): BelongsTo
     {
         return $this->belongsTo(MediaAsset::class, 'cover_media_id');
+    }
+
+    /**
+     * Media assets embedded in the article body, as opposed to the cover image.
+     *
+     * @return HasMany<NewsArticleMedia, $this>
+     */
+    public function bodyMedia(): HasMany
+    {
+        return $this->hasMany(NewsArticleMedia::class);
     }
 
     public function scopePublished(Builder $query): Builder

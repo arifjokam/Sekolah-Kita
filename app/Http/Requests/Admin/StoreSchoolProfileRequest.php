@@ -44,9 +44,13 @@ class StoreSchoolProfileRequest extends FormRequest
             'postal_code' => ['nullable', 'string', 'max:10'],
             'public_phone' => ['nullable', 'string', 'max:30', 'regex:/^[0-9+() .-]+$/'],
             'public_email' => ['nullable', 'email:rfc', 'max:150'],
-            'vision' => ['nullable', 'string', 'max:5000'],
-            'mission' => ['nullable', 'string', 'max:5000'],
-            'about' => ['nullable', 'string', 'max:10000'],
+            // The long-form fields hold editor markup, so the character cap is
+            // the domain's own limit rather than a validation maximum; the
+            // storage ceiling is enforced in SchoolProfileContentService so a
+            // rejected body reports a storage message instead of a length one.
+            'vision' => ['nullable', 'string', 'max:20000'],
+            'mission' => ['nullable', 'string', 'max:20000'],
+            'about' => ['nullable', 'string', 'max:60000'],
             'logo_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'mimetypes:image/jpeg,image/png,image/webp', 'extensions:jpg,jpeg,png,webp', 'max:5120', 'dimensions:min_width=1,min_height=1,max_width=6000,max_height=6000'],
             'hero_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'mimetypes:image/jpeg,image/png,image/webp', 'extensions:jpg,jpeg,png,webp', 'max:5120', 'dimensions:min_width=1,min_height=1,max_width=6000,max_height=6000'],
             'remove_logo' => ['nullable', 'boolean'],

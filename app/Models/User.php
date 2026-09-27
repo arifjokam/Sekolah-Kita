@@ -64,6 +64,28 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(AdmissionApplication::class, 'assigned_reviewer_user_id');
     }
 
+    /**
+     * Applications this account created through the PPDB applicant portal.
+     *
+     * Distinct from assignedAdmissionApplications(): that is the administrator
+     * side of the review queue, this is the applicant's own record.
+     */
+    public function admissionApplications(): HasMany
+    {
+        return $this->hasMany(AdmissionApplication::class, 'applicant_user_id');
+    }
+
+    public function notificationDeliveries(): HasMany
+    {
+        return $this->hasMany(NotificationDelivery::class, 'notifiable_id')
+            ->where('notifiable_type', self::class);
+    }
+
+    public function attendanceSessionsMarked(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class, 'marked_by_user_id');
+    }
+
     public function admissionReviews(): HasMany
     {
         return $this->hasMany(AdmissionReview::class, 'reviewer_user_id');
@@ -114,5 +136,16 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isSiswa(): bool
     {
         return $this->role === UserRole::Siswa;
+    }
+
+    /**
+     * A PPDB applicant account.
+     *
+     * A calon is not a student: it owns no Student, Enrollment or class, and
+     * therefore fails every student-, teacher- and administrator-scoped ability.
+     */
+    public function isCalon(): bool
+    {
+        return $this->role === UserRole::Calon;
     }
 }

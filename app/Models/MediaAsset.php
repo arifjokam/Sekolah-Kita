@@ -77,6 +77,14 @@ class MediaAsset extends Model
         return $this->hasMany(NewsArticle::class, 'cover_media_id');
     }
 
+    /**
+     * @return HasMany<NewsArticleMedia, $this>
+     */
+    public function newsBodyUsages(): HasMany
+    {
+        return $this->hasMany(NewsArticleMedia::class);
+    }
+
     public function achievements(): HasMany
     {
         return $this->hasMany(Achievement::class, 'cover_media_id');

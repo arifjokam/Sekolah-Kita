@@ -25,9 +25,27 @@
                     <div><label for="public_phone" class="block text-sm font-semibold text-slate-800">Telepon publik</label><input id="public_phone" name="public_phone" value="{{ old('public_phone', $profile?->public_phone) }}" maxlength="30" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"><x-form.field-error name="public_phone" /></div>
                     <div><label for="public_email" class="block text-sm font-semibold text-slate-800">Email publik</label><input id="public_email" name="public_email" type="email" value="{{ old('public_email', $profile?->public_email) }}" maxlength="150" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"><x-form.field-error name="public_email" /></div>
                 </div>
-                <div><label for="vision" class="block text-sm font-semibold text-slate-800">Visi</label><textarea id="vision" name="vision" rows="4" maxlength="5000" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm">{{ old('vision', $profile?->vision) }}</textarea><x-form.field-error name="vision" /></div>
-                <div><label for="mission" class="block text-sm font-semibold text-slate-800">Misi</label><textarea id="mission" name="mission" rows="4" maxlength="5000" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm">{{ old('mission', $profile?->mission) }}</textarea><x-form.field-error name="mission" /></div>
-                <div><label for="about" class="block text-sm font-semibold text-slate-800">Tentang sekolah</label><textarea id="about" name="about" rows="6" maxlength="10000" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm">{{ old('about', $profile?->about) }}</textarea><x-form.field-error name="about" /></div>
+                <x-form.rich-text-editor
+                    name="vision"
+                    label="Visi"
+                    :value="old('vision', $profile?->vision)"
+                    placeholder="Tulis visi sekolah di sini…"
+                    :rows="5"
+                />
+                <x-form.rich-text-editor
+                    name="mission"
+                    label="Misi"
+                    :value="old('mission', $profile?->mission)"
+                    placeholder="Tulis misi sekolah di sini…"
+                    :rows="5"
+                />
+                <x-form.rich-text-editor
+                    name="about"
+                    label="Tentang sekolah"
+                    :value="old('about', $profile?->about)"
+                    placeholder="Tulis profil singkat sekolah di sini…"
+                    :rows="8"
+                />
             </div>
             <aside class="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
                 <div><h2 class="text-lg font-bold text-slate-950">Gambar publik</h2><p class="mt-2 text-sm leading-6 text-slate-600">JPG, PNG, atau WebP maksimal 5 MiB. File disimpan privat dan hanya disalin ke disk publik setelah dipublikasikan.</p></div>

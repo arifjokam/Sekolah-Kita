@@ -74,6 +74,7 @@ class Student extends Model
     {
         return $this->belongsToMany(Guardian::class, 'student_guardians')
             ->withPivot([
+                'id',
                 'relationship_type',
                 'is_primary_contact',
                 'is_emergency_contact',
@@ -88,6 +89,11 @@ class Student extends Model
     public function activeEnrollments(): HasMany
     {
         return $this->enrollments()->active();
+    }
+
+    public function attendanceRecords(): HasMany
+    {
+        return $this->hasMany(AttendanceRecord::class, 'student_id');
     }
 
     public function convertedAdmissionApplications(): HasMany

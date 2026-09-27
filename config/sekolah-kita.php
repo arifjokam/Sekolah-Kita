@@ -15,6 +15,62 @@ return [
         'consent_version' => env('PPDB_CONSENT_VERSION', '2026-01'),
         'access_token_ttl_days' => (int) env('PPDB_ACCESS_TOKEN_TTL_DAYS', 7),
         'max_document_bytes' => (int) env('PPDB_MAX_DOCUMENT_BYTES', 10_485_760),
+
+        /*
+         * The applicant portal (role: calon) is opt-out. The public one-shot
+         * PPDB form stays available either way, so a deployment that does not
+         * want self-service applicant accounts can disable the portal without
+         * touching the existing public flow.
+         */
+        'portal_enabled' => (bool) env('PPDB_PORTAL_ENABLED', true),
+    ],
+
+    'whatsapp' => [
+        /*
+         * No default provider. With the driver left as "null" every WhatsApp
+         * attempt is recorded as NotificationDeliveryStatus::NotConfigured and
+         * the in-app notification still goes out, so local development never
+         * pretends a message was sent.
+         */
+        'driver' => env('WHATSAPP_DRIVER', 'null'),
+        'queue' => env('WHATSAPP_QUEUE', 'notifications'),
+        'from' => env('WHATSAPP_FROM'),
+        'tries' => (int) env('WHATSAPP_TRIES', 3),
+        'backoff' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('WHATSAPP_BACKOFF', '30,120,600')),
+        ))),
+
+        'providers' => [
+            'fonnte' => [
+                'token' => env('FONNTE_TOKEN'),
+                'endpoint' => env('FONNTE_ENDPOINT', 'https://api.fonnte.com/send'),
+                'timeout' => (int) env('FONNTE_TIMEOUT', 15),
+            ],
+        ],
+    ],
+
+    'schedule' => [
+        /*
+         * ISO day numbers the school teaches on. Monday (1) through Saturday (6)
+         * by default, which is the common six-day Indonesian school week.
+         * Add 7 to enable Sunday.
+         */
+        'allowed_days' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('SCHEDULE_ALLOWED_DAYS', '1,2,3,4,5,6')),
+        ))),
+        'max_lessons_per_day' => (int) env('SCHEDULE_MAX_LESSONS_PER_DAY', 12),
+    ],
+
+    'news' => [
+        /*
+         * How long an image uploaded from the article create screen survives
+         * before news:prune-staged-article-images treats it as abandoned. The
+         * window has to cover a slow writing session, because the image is
+         * published to the public disk as soon as it is uploaded.
+         */
+        'staged_image_ttl_hours' => (int) env('NEWS_STAGED_IMAGE_TTL_HOURS', 6),
     ],
 
     'platform' => [

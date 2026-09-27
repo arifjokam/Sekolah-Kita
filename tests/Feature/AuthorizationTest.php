@@ -27,14 +27,18 @@ class AuthorizationTest extends TestCase
             ->assertSee('Area administrator');
     }
 
-    public function test_dashboard_accepts_each_fixed_role(): void
+    public function test_dashboard_redirects_a_siswa_to_the_student_landing_page(): void
     {
         $siswa = User::factory()->create();
 
         $this->actingAs($siswa)
             ->get(route('dashboard'))
+            ->assertRedirect(route('dashboard.siswa'));
+
+        $this->actingAs($siswa)
+            ->get(route('dashboard.siswa'))
             ->assertOk()
-            ->assertSee('Fondasi aplikasi');
+            ->assertSee('Informasi siswa');
     }
 
     public function test_role_middleware_forbids_a_different_role(): void

@@ -1,8 +1,99 @@
 @extends('layouts.app')
 
-@section('title', 'Edit profil guru · Admin')
+@section('title', ($teacher ? 'Edit' : 'Tambah').' guru · Admin')
 
 @section('content')
-    <div class="mb-8"><a href="{{ route('admin.teachers.index') }}" class="text-sm font-semibold text-cyan-700 hover:text-cyan-900">← Kembali ke daftar guru</a><h1 class="mt-4 text-3xl font-bold tracking-tight text-slate-950">Profil publik {{ $teacher->legal_name }}</h1><p class="mt-2 text-sm text-slate-600">Data privat guru tidak diubah dari formulir ini.</p></div>
-    <form method="POST" action="{{ route('admin.teachers.update', $teacher) }}" enctype="multipart/form-data" class="max-w-3xl space-y-6">@csrf @method('PUT') <x-form.error-summary /><div class="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><div><label for="directory_slug" class="block text-sm font-semibold text-slate-800">Slug publik <span class="text-rose-700">*</span></label><input id="directory_slug" name="directory_slug" value="{{ old('directory_slug', $teacher->directory_slug) }}" required maxlength="180" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"><p class="mt-1 text-xs text-slate-500">Gunakan slug non-identifying, bukan NIP atau email.</p><x-form.field-error name="directory_slug" /></div><div><label for="position_title" class="block text-sm font-semibold text-slate-800">Jabatan profesional</label><input id="position_title" name="position_title" value="{{ old('position_title', $teacher->position_title) }}" maxlength="100" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"><x-form.field-error name="position_title" /></div><div><label for="biography" class="block text-sm font-semibold text-slate-800">Biografi publik</label><textarea id="biography" name="biography" rows="8" maxlength="5000" class="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm leading-7">{{ old('biography', $teacher->biography) }}</textarea><x-form.field-error name="biography" /></div><div><label for="photo" class="block text-sm font-semibold text-slate-800">Foto publik</label><input id="photo" name="photo" type="file" accept=".jpg,.jpeg,.png,.webp" class="mt-2 block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-cyan-800"><x-form.field-error name="photo" />@if($teacher->photo_media_id)<label class="mt-3 flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="remove_photo" value="1" class="rounded border-slate-300 text-cyan-700 focus:ring-cyan-600"> Hapus foto saat ini</label>@endif</div><label class="flex items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-900"><input type="checkbox" name="privacy_review_confirmed" value="1" class="mt-1 rounded border-amber-300 text-cyan-700 focus:ring-cyan-600" @checked(old('privacy_review_confirmed'))><span>Saya telah mendapat izin yang sesuai dan telah meninjau foto untuk dipublikasikan.</span></label><x-form.field-error name="privacy_review_confirmed" /><div class="rounded-xl bg-slate-50 p-4 text-sm text-slate-600"><p class="font-semibold text-slate-800">Status publik</p><p class="mt-1">{{ $teacher->is_publicly_visible ? 'Sudah diterbitkan' : 'Belum diterbitkan' }}</p></div><button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-cyan-700 px-5 py-3 text-sm font-bold text-white transition hover:bg-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Simpan profil</button></div></form>
+    @php
+        $breadcrumbs = [
+            ['label' => 'Dashboard', 'route' => 'dashboard.administrator'],
+            ['label' => 'Guru', 'route' => 'admin.teachers.index'],
+            ['label' => $teacher ? 'Edit' : 'Tambah'],
+        ];
+    @endphp
+
+    <x-admin.page-header
+        eyebrow="Master data"
+        :title="$teacher ? 'Edit data guru' : 'Tambah guru'"
+        :description="$teacher
+            ? 'Perubahan disimpan ke record guru. Akun login tidak dibuat otomatis dari formulir ini.'
+            : 'Record kepegawaian guru. Akun login dan penugasan mengajar disiapkan terpisah.'"
+    />
+
+    <x-form.error-summary />
+
+    <form
+        method="POST"
+        action="{{ $teacher ? route('admin.teachers.update', $teacher) : route('admin.teachers.store') }}"
+        class="space-y-6"
+    >
+        @csrf
+        @if ($teacher) @method('PUT') @endif
+
+        <div class="grid gap-6 lg:grid-cols-2">
+            <section class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="identity-heading">
+                <h2 id="identity-heading" class="text-lg font-bold text-slate-950">Identitas</h2>
+
+                <x-form.text name="legal_name" label="Nama lengkap" required :value="$teacher?->legal_name" maxlength="150" />
+                <x-form.text name="preferred_name" label="Nama panggilan" :value="$teacher?->preferred_name" maxlength="150" hint="Dipakai pada sapaan di dashboard dan daftar kelas." />
+                <x-form.text name="employee_number" label="Nomor induk pegawai" required :value="$teacher?->employee_number" maxlength="50" hint="Huruf, angka, titik, garis hubung, dan garis miring." />
+                <x-form.text name="position_title" label="Jabatan" :value="$teacher?->position_title" maxlength="100" />
+                <x-form.text name="national_id" label="Nomor identitas nasional" :value="$teacher?->national_id" maxlength="32" hint="8 sampai 32 digit. Data ini tidak pernah dipublikasikan." />
+            </section>
+
+            <section class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="employment-heading">
+                <h2 id="employment-heading" class="text-lg font-bold text-slate-950">Kepegawaian</h2>
+
+                <x-form.select
+                    name="employment_status"
+                    label="Status kepegawaian"
+                    required
+                    :value="$teacher?->employment_status?->value ?? \App\Enums\TeacherEmploymentStatus::Active->value"
+                    :options="collect($statuses)->mapWithKeys(fn ($status) => [$status->value => $status->label()])"
+                />
+                <x-form.date name="employment_start_date" label="Tanggal mulai kerja" required :value="$teacher?->employment_start_date" />
+                <x-form.date name="employment_end_date" label="Tanggal akhir kerja" :value="$teacher?->employment_end_date" hint="Diisi otomatis saat status menjadi tidak aktif atau pensiun." />
+
+                <div>
+                    <label for="gender" class="block text-sm font-medium text-slate-700">Jenis kelamin</label>
+                    <select id="gender" name="gender" class="mt-1 block w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm shadow-sm focus:border-cyan-600 focus:outline-none focus:ring-2 focus:ring-cyan-600/30">
+                        <option value="">Tidak diisi</option>
+                        <option value="L" @selected(old('gender', $teacher?->gender) === 'L')>Laki-laki</option>
+                        <option value="P" @selected(old('gender', $teacher?->gender) === 'P')>Perempuan</option>
+                    </select>
+                    <x-form.field-error name="gender" />
+                </div>
+
+                <x-form.date name="birth_date" label="Tanggal lahir" :value="$teacher?->birth_date" />
+                <x-form.text name="birth_place" label="Tempat lahir" :value="$teacher?->birth_place" maxlength="100" />
+            </section>
+
+            <section class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="contact-heading">
+                <h2 id="contact-heading" class="text-lg font-bold text-slate-950">Kontak</h2>
+
+                <div class="grid gap-5 sm:grid-cols-2">
+                    <x-form.text name="email" label="Email" type="email" :value="$teacher?->email" maxlength="150" />
+                    <x-form.text name="phone" label="Telepon" :value="$teacher?->phone" maxlength="30" />
+                </div>
+
+                <x-form.textarea name="address" label="Alamat" :value="$teacher?->address" :rows="3" maxlength="2000" />
+            </section>
+
+            <section class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-labelledby="profile-heading">
+                <h2 id="profile-heading" class="text-lg font-bold text-slate-950">Ringkasan profesional</h2>
+                <p class="text-sm leading-6 text-slate-600">
+                    Ringkasan kualifikasi tampil di direktori publik bila profil guru diterbitkan. Biografi publik diatur pada halaman Guru publik.
+                </p>
+
+                <x-form.textarea name="qualification_summary" label="Ringkasan kualifikasi" :value="$teacher?->qualification_summary" :rows="3" maxlength="2000" />
+                <x-form.textarea name="biography" label="Biografi" :value="$teacher?->biography" :rows="6" maxlength="5000" />
+            </section>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-3">
+            <a href="{{ $teacher ? route('admin.teachers.show', $teacher) : route('admin.teachers.index') }}" class="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Batal</a>
+            <button type="submit" class="rounded-xl bg-cyan-700 px-5 py-3 text-sm font-bold text-white transition hover:bg-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">
+                {{ $teacher ? 'Simpan perubahan' : 'Simpan guru' }}
+            </button>
+        </div>
+    </form>
 @endsection

@@ -21,8 +21,8 @@
                     <div class="p-7 sm:p-10 lg:p-14">
                         <p class="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">Profil sekolah</p>
                         <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{{ $profile['name'] }}</h1>
-                        @if ($profile['about'])
-                            <p class="mt-5 text-base leading-8 text-slate-700">{{ $profile['about'] }}</p>
+                        @if ($profile['about']['text'] ?? null)
+                            <x-public.profile-copy :copy="$profile['about']" class="mt-5" />
                         @endif
                         <dl class="mt-8 grid gap-5 sm:grid-cols-2">
                             @if ($profile['address_line'] || $profile['city'])
@@ -41,10 +41,10 @@
 
             <div class="mt-8 grid gap-8 lg:grid-cols-2">
                 @foreach (['Visi' => $profile['vision'], 'Misi' => $profile['mission']] as $heading => $content)
-                    @if ($content)
+                    @if ($content['text'] ?? null)
                         <section class="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
                             <h2 class="text-xl font-bold text-slate-950">{{ $heading }}</h2>
-                            <x-public.prose :text="$content" class="mt-4" />
+                            <x-public.profile-copy :copy="$content" class="mt-4" />
                         </section>
                     @endif
                 @endforeach

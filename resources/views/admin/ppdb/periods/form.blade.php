@@ -1,31 +1,78 @@
 @extends('layouts.app')
 
-@section('title', ($admissionPeriod ? 'Edit' : 'Tambah').' periode PPDB')
+@section('title', ($admissionPeriod ? 'Edit' : 'Tambah').' periode PPDB · Admin')
 
 @section('content')
-    <div class="mx-auto max-w-4xl space-y-6">
-        <a href="{{ route('admin.ppdb.periods.index') }}" class="text-sm font-semibold text-cyan-700 hover:text-cyan-900">← Kembali ke periode PPDB</a>
-        <header>
-            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Administrasi PPDB</p>
-            <h1 class="mt-2 text-3xl font-bold text-slate-950">{{ $admissionPeriod ? 'Edit periode' : 'Tambah periode' }}</h1>
-        </header>
+    @php
+        $breadcrumbs = [
+            ['label' => 'Dashboard', 'route' => 'dashboard.administrator'],
+            ['label' => 'Periode', 'route' => 'admin.ppdb.periods.index'],
+            ['label' => $admissionPeriod ? 'Edit' : 'Tambah'],
+        ];
 
-        <x-form.error-summary />
-        <form method="POST" action="{{ $admissionPeriod ? route('admin.ppdb.periods.update', $admissionPeriod) : route('admin.ppdb.periods.store') }}" class="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        $hasAcademicYears = $academicYears->isNotEmpty();
+    @endphp
+
+    <x-admin.page-header
+        eyebrow="PPDB"
+        :title="$admissionPeriod ? 'Edit periode' : 'Tambah periode'"
+        description="Tahun ajaran, nama, dan slug wajib diisi. Periode baru disimpan sebagai draf dan dibuka secara terpisah."
+    />
+
+    <x-form.error-summary />
+
+    @unless ($hasAcademicYears)
+        {{--
+            The root cause of an unsaveable period form: a period requires an
+            academic year, and an empty academic_years table produces an empty
+            required select. The form says so explicitly instead of rendering a
+            dead dropdown.
+        --}}
+        <x-admin.empty-state
+            label="Tahun ajaran belum tersedia"
+            message="Formulir periode PPDB memerlukan tahun ajaran, dan saat ini belum ada tahun ajaran yang dapat dipilih. Buat tahun ajaran lebih dahulu, lalu kembali ke halaman ini."
+            action-label="Tambah tahun ajaran"
+            action-route="admin.academic-years.create"
+        />
+    @endunless
+
+    @if ($hasAcademicYears)
+        <form
+            method="POST"
+            action="{{ $admissionPeriod ? route('admin.ppdb.periods.update', $admissionPeriod) : route('admin.ppdb.periods.store') }}"
+            class="max-w-4xl"
+        >
             @csrf
-            @if($admissionPeriod) @method('PUT') @endif
-            <div class="grid gap-5 sm:grid-cols-2">
-                <label class="grid gap-1 text-sm font-medium text-slate-700">Tahun ajaran<select name="academic_year_id" required class="rounded-lg border-slate-300">@foreach($academicYears as $year)<option value="{{ $year->id }}" @selected(old('academic_year_id', $admissionPeriod?->academic_year_id) === $year->id)>{{ $year->label }} ({{ $year->code }})</option>@endforeach</select><x-form.field-error name="academic_year_id" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700">Nama periode<input name="name" value="{{ old('name', $admissionPeriod?->name) }}" required class="rounded-lg border-slate-300"><x-form.field-error name="name" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700">Slug<input name="slug" value="{{ old('slug', $admissionPeriod?->slug) }}" required class="rounded-lg border-slate-300"><x-form.field-error name="slug" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700">Kuota total (opsional)<input type="number" name="quota" value="{{ old('quota', $admissionPeriod?->quota) }}" min="1" class="rounded-lg border-slate-300"><x-form.field-error name="quota" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700">Dibuka<input type="datetime-local" name="opens_at" value="{{ old('opens_at', $admissionPeriod?->opens_at?->format('Y-m-d\TH:i')) }}" required class="rounded-lg border-slate-300"><x-form.field-error name="opens_at" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700">Ditutup<input type="datetime-local" name="closes_at" value="{{ old('closes_at', $admissionPeriod?->closes_at?->format('Y-m-d\TH:i')) }}" required class="rounded-lg border-slate-300"><x-form.field-error name="closes_at" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700 sm:col-span-2">Deskripsi publik<textarea name="description" rows="4" class="rounded-lg border-slate-300">{{ old('description', $admissionPeriod?->description) }}</textarea><x-form.field-error name="description" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700 sm:col-span-2">Instruksi publik<textarea name="instructions" rows="5" class="rounded-lg border-slate-300">{{ old('instructions', $admissionPeriod?->instructions) }}</textarea><x-form.field-error name="instructions" /></label>
-                <label class="grid gap-1 text-sm font-medium text-slate-700 sm:col-span-2">Catatan internal<textarea name="internal_notes" rows="3" class="rounded-lg border-slate-300">{{ old('internal_notes', $admissionPeriod?->internal_notes) }}</textarea><x-form.field-error name="internal_notes" /></label>
+            @if ($admissionPeriod) @method('PUT') @endif
+
+            <div class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="grid gap-5 sm:grid-cols-2">
+                    <x-form.select
+                        name="academic_year_id"
+                        label="Tahun ajaran"
+                        required
+                        :value="$admissionPeriod?->academic_year_id"
+                        :options="$academicYears->mapWithKeys(fn ($year) => [$year->id => $year->label.' · '.$year->code])"
+                    />
+                    <x-form.text name="name" label="Nama periode" required :value="$admissionPeriod?->name" maxlength="150" />
+                    <x-form.text name="slug" label="Slug" required :value="$admissionPeriod?->slug" maxlength="180" hint="Huruf kecil, angka, dan tanda hubung." />
+                    <x-form.text name="quota" label="Kuota total" type="number" :value="$admissionPeriod?->quota" :min="1" :max="100000" hint="Kosongkan untuk tanpa kuota." />
+                </div>
+
+                <div class="grid gap-5 sm:grid-cols-2">
+                    <x-form.text name="opens_at" label="Dibuka" type="datetime-local" required :value="$admissionPeriod?->opens_at?->format('Y-m-d\TH:i')" />
+                    <x-form.text name="closes_at" label="Ditutup" type="datetime-local" required :value="$admissionPeriod?->closes_at?->format('Y-m-d\TH:i')" />
+                </div>
+
+                <x-form.textarea name="description" label="Deskripsi publik" :value="$admissionPeriod?->description" :rows="4" maxlength="5000" />
+                <x-form.textarea name="instructions" label="Instruksi publik" :value="$admissionPeriod?->instructions" :rows="5" maxlength="10000" />
+                <x-form.textarea name="internal_notes" label="Catatan internal" :value="$admissionPeriod?->internal_notes" :rows="3" maxlength="5000" />
             </div>
-            <div class="flex justify-end"><button type="submit" class="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-800">Simpan periode</button></div>
+
+            <div class="mt-6 flex flex-wrap items-center justify-end gap-3">
+                <a href="{{ route('admin.ppdb.periods.index') }}" class="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Batal</a>
+                <button type="submit" class="rounded-xl bg-cyan-700 px-5 py-3 text-sm font-bold text-white transition hover:bg-cyan-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600">Simpan periode</button>
+            </div>
         </form>
-    </div>
+    @endif
 @endsection

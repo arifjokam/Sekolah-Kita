@@ -1,58 +1,107 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Sekolah Kita
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Sistem Informasi Manajemen Sekolah berbasis web. Ringkasan operasional, akun,
+master data akademik, PPDB, dan konten publik dalam satu aplikasi.
 
-## About Laravel
+Stack: Laravel 13, PHP 8.5, MariaDB, Redis, Vite, Tailwind CSS 4, CKEditor 5.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Persyaratan
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP 8.3+ (dibangun dan diuji pada 8.5)
+- Composer 2
+- MariaDB dan Redis
+- Node.js 20+ dan npm
 
-## Learning Laravel
+---
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Menjalankan secara lokal
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+npm install
+npm run build
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+---
 
-## Contributing
+## Data uji pengembangan (UAT)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Aplikasi tidak pernah membuat akun lewat `php artisan migrate` atau
+`db:seed` bawaan. Untuk lingkungan lokal dan UAT, gunakan satu perintah
+eksplisit:
 
-## Code of Conduct
+```bash
+php artisan sekolah:seed-demo
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Perintah tersebut menulis secara idempotent (aman dijalankan berulang kali):
 
-## Security Vulnerabilities
+- tiga akun uji dengan peran administrator, guru, dan siswa;
+- tahun ajaran aktif beserta term;
+- kelas, mata pelajaran, guru, siswa, wali, dan enrollment;
+- assignment mengajar dan wali kelas;
+- satu periode PPDB yang terbuka beserta pengajuan pada beberapa status;
+- sedikit contoh berita.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Kredensial lokal (hanya untuk pengembangan, **jangan dipakai di produksi**):
 
-## License
+| Peran | Email | Kata sandi |
+| --- | --- | --- |
+| Administrator | `admin.test@sekolah.local` | `SekolahKita#Dev2026` |
+| Guru | `guru.test@sekolah.local` | `SekolahKita#Dev2026` |
+| Siswa | `siswa.test@sekolah.local` | `SekolahKita#Dev2026` |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Perintah menolak dijalankan ketika `APP_ENV=production` dan tidak punya
+pengecualian untuk itu, sehingga fixture tidak pernah masuk ke deployment
+sekolah.
+
+---
+
+## Ringkasan fitur
+
+| Area | Lokasi |
+| --- | --- |
+| Dashboard per peran | `/dashboard/administrator`, `/dashboard/guru`, `/dashboard/siswa` |
+| Workspace guru | `/guru/kelas` |
+| Master data guru dan siswa | `/admin/teachers`, `/admin/students` |
+| Master data akademik | `/admin/academic-years`, `/admin/terms`, `/admin/classes`, `/admin/subjects` |
+| Penugasan dan enrollment | `/admin/teaching-assignments`, `/admin/class-teacher-assignments`, `/admin/enrollments` |
+| PPDB | `/admin/ppdb/periods`, `/admin/ppdb/applications`, `/admin/ppdb/review` |
+| Konten publik | `/admin/news`, `/admin/achievements`, `/admin/gallery-albums`, `/admin/teacher-directory`, `/admin/school-profile` |
+| Sistem | `/notifications`, `/admin/audit-logs`, `/health/ready` |
+
+Dokumentasi lebih lengkap ada di `docs/`:
+
+- `ARCHITECTURE_DECISIONS.md` — keputusan arsitektur yang disetujui
+- `SECURITY_REVIEW.md` — tinjauan keamanan
+- `RICH_TEXT_EDITOR.md` — penyunting isi berita, unggah gambar, dan sanitasi
+- `BROWSER_VERIFICATION.md` — verifikasi end-to-end dengan Chromium sungguhan
+- `PRODUCTION_RUNBOOK.md` — prosedur operasional produksi
+- `PRODUCTION_CAPACITY_GUIDE.md` — panduan kapasitas
+
+---
+
+## Perintah yang berguna
+
+```bash
+php artisan test                        # seluruh pengujian
+php artisan sekolah:seed-demo            # data uji lokal
+php artisan platform:readiness           # laporan kesiapan produksi
+php artisan platform:heartbeat           # denyut scheduler
+php artisan news:prune-staged-article-images   # pembersihan gambar artikel terlantar
+npm run build                            # aset produksi
+npm run dev                              # Vite dev server
+npm run test:e2e                         # verifikasi browser (butuh server berjalan)
+```
+
+Gaya kode mengikuti Laravel Pint:
+
+```bash
+./vendor/bin/pint
+```

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'admission_application_id',
@@ -49,5 +50,29 @@ class ApplicationDocument extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by_user_id');
+    }
+
+    /**
+     * The full reviewer trail for this document, newest first.
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(AdmissionReview::class)->orderByDesc('created_at');
+    }
+
+    /**
+     * Whether the applicant may replace this document.
+     *
+     * Only a document a reviewer actually sent back can be replaced, and only
+     * while the application is in a state that accepts a new version.
+     */
+    public function needsReplacement(): bool
+    {
+        return $this->verification_status === AdmissionDocumentVerificationStatus::NeedsRevision;
+    }
+
+    public function isSettled(): bool
+    {
+        return $this->verification_status->isSettled();
     }
 }

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreSchoolProfileRequest;
 use App\Models\SchoolProfile;
 use App\Models\User;
-use App\Services\PublicContentManager;
+use App\Services\SchoolProfileContentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -24,11 +24,11 @@ class SchoolProfileController extends Controller
 
     public function update(
         StoreSchoolProfileRequest $request,
-        PublicContentManager $content,
+        SchoolProfileContentService $content,
     ): RedirectResponse {
         /** @var User $actor */
         $actor = $request->user();
-        $content->saveSchoolProfile(
+        $content->save(
             $actor,
             SchoolProfile::query()->where('is_singleton', true)->first(),
             $request->validated(),

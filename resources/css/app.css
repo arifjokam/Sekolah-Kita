@@ -7,3 +7,177 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+/*
+| Sanitized rich text article body.
+|
+| The markup is reduced to the editor allowlist by RichTextSanitizer, so these
+| rules only style known elements. Alignment and image sizing arrive as data
+| attributes rather than inline styles, which is why no rule here trusts a style
+| attribute, and why an unknown data value simply renders unstyled.
+*/
+@layer components {
+    .rich-text > * + * {
+        margin-top: 1em;
+    }
+
+    .rich-text h2 {
+        margin-top: 1.75em;
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+        color: var(--color-slate-950);
+    }
+
+    .rich-text h3 {
+        margin-top: 1.5em;
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.4;
+        color: var(--color-slate-950);
+    }
+
+    .rich-text h4 {
+        margin-top: 1.5em;
+        font-size: 1.0625rem;
+        font-weight: 700;
+        line-height: 1.5;
+        color: var(--color-slate-900);
+    }
+
+    .rich-text ul,
+    .rich-text ol {
+        padding-left: 1.5rem;
+    }
+
+    .rich-text ul {
+        list-style-type: disc;
+    }
+
+    .rich-text ol {
+        list-style-type: decimal;
+    }
+
+    .rich-text li + li {
+        margin-top: 0.375rem;
+    }
+
+    .rich-text li > ul,
+    .rich-text li > ol {
+        margin-top: 0.375rem;
+    }
+
+    .rich-text blockquote {
+        border-left: 4px solid var(--color-cyan-200);
+        border-radius: 0 0.75rem 0.75rem 0;
+        background-color: var(--color-cyan-50);
+        padding: 0.75rem 1rem;
+        color: var(--color-slate-700);
+    }
+
+    .rich-text hr {
+        border-top: 1px solid var(--color-slate-200);
+    }
+
+    .rich-text a {
+        color: var(--color-cyan-800);
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    .rich-text a:hover {
+        color: var(--color-cyan-900);
+    }
+
+    .rich-text img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 0.75rem;
+    }
+
+    .rich-text [data-align='center'] {
+        text-align: center;
+    }
+
+    .rich-text [data-align='right'] {
+        text-align: right;
+    }
+
+    .rich-text [data-align='justify'] {
+        text-align: justify;
+    }
+
+    .rich-text img[data-align='center'] {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .rich-text img[data-width='25'] {
+        width: 25%;
+    }
+
+    .rich-text img[data-width='50'] {
+        width: 50%;
+    }
+
+    .rich-text img[data-width='75'] {
+        width: 75%;
+    }
+}
+
+/*
+| Rich text editor chrome.
+|
+| CKEditor 5 ships its own stylesheet, so these rules only frame the editing
+| surface inside the admin card: a comfortable writing area, a sticky toolbar
+| that stays reachable while a long article is written, and a fullscreen mode
+| that turns the editor into a fixed overlay. Nothing here styles editor
+| internals, so an upgrade cannot be broken by this file.
+*/
+@layer components {
+    .rte-loading {
+        min-height: 8rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .rte-surface .ck.ck-editor {
+        border: 0;
+    }
+
+    .rte-surface .ck.ck-editor__top .ck-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--color-slate-50);
+        border-bottom: 1px solid var(--color-slate-200);
+    }
+
+    .rte-surface .ck.ck-editor__editable {
+        min-height: 20rem;
+        font-size: 0.9375rem;
+        line-height: 1.8;
+    }
+
+    .rte-surface .ck.ck-editor__editable_inline {
+        padding: 1rem 1.125rem;
+    }
+
+    .rte-fullscreen-surface {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: flex;
+        flex-direction: column;
+        background: var(--color-white);
+    }
+
+    .rte-fullscreen-surface .ck.ck-editor__editable {
+        flex: 1;
+        overflow-y: auto;
+    }
+}

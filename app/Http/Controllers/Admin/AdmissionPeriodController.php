@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAdmissionPeriodRequest;
 use App\Http\Requests\UpdateAdmissionPeriodRequest;
 use App\Models\AcademicYear;
+use App\Models\AdmissionApplication;
 use App\Models\AdmissionPeriod;
 use App\Services\AdmissionPeriodService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class AdmissionPeriodController extends Controller
@@ -18,11 +21,15 @@ class AdmissionPeriodController extends Controller
     {
         $periods = AdmissionPeriod::query()
             ->with('academicYear:id,code,label')
+            ->withCount('applications')
             ->latest('opens_at')
             ->paginate(15)
             ->withQueryString();
 
-        return view('admin.ppdb.periods.index', compact('periods'));
+        return view('admin.ppdb.periods.index', [
+            'periods' => $periods,
+            'hasAcademicYear' => AcademicYear::query()->exists(),
+        ]);
     }
 
     public function create(): View
@@ -30,6 +37,24 @@ class AdmissionPeriodController extends Controller
         return view('admin.ppdb.periods.form', [
             'admissionPeriod' => null,
             'academicYears' => AcademicYear::query()->orderByDesc('starts_on')->get(['id', 'code', 'label']),
+        ]);
+    }
+
+    public function show(AdmissionPeriod $admissionPeriod): View
+    {
+        Gate::authorize('view', $admissionPeriod);
+
+        $admissionPeriod->load('academicYear');
+        $admissionPeriod->loadCount('applications');
+
+        return view('admin.ppdb.periods.show', [
+            'admissionPeriod' => $admissionPeriod,
+            'statusCounts' => AdmissionApplication::query()
+                ->where('admission_period_id', $admissionPeriod->getKey())
+                ->select('status', DB::raw('count(*) as aggregate'))
+                ->groupBy('status')
+                ->pluck('aggregate', 'status')
+                ->map(static fn (int|string $count): int => (int) $count),
         ]);
     }
 

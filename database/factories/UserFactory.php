@@ -71,4 +71,17 @@ class UserFactory extends Factory
             'role' => UserRole::Guru,
         ]);
     }
+
+    /**
+     * A PPDB applicant account.
+     *
+     * An applicant is not a student: the factory deliberately creates no Student
+     * row, which is what the access-isolation tests rely on.
+     */
+    public function calon(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'role' => UserRole::Calon,
+        ]);
+    }
 }

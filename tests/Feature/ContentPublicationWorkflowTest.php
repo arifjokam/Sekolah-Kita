@@ -103,11 +103,11 @@ class ContentPublicationWorkflowTest extends TestCase
         $admin = User::factory()->administrator()->create();
         $teacher = Teacher::factory()->create(['directory_slug' => 'guru-aktif']);
 
-        $this->actingAs($admin)->post(route('admin.teachers.publish', $teacher))->assertRedirect();
+        $this->actingAs($admin)->post(route('admin.teacher-directory.publish', $teacher))->assertRedirect();
         $this->assertTrue($teacher->refresh()->is_publicly_visible);
 
         $teacher->update(['employment_status' => TeacherEmploymentStatus::Retired]);
-        $this->actingAs($admin)->post(route('admin.teachers.publish', $teacher))->assertSessionHasErrors('teacher');
+        $this->actingAs($admin)->post(route('admin.teacher-directory.publish', $teacher))->assertSessionHasErrors('teacher');
         $this->assertFalse($teacher->refresh()->is_publicly_visible);
     }
 
@@ -238,8 +238,8 @@ class ContentPublicationWorkflowTest extends TestCase
             route('admin.gallery-albums.items.index', $album),
             route('admin.gallery-albums.items.create', $album),
             route('admin.gallery-albums.items.edit', [$album, $item]),
-            route('admin.teachers.index'),
-            route('admin.teachers.edit', $teacher),
+            route('admin.teacher-directory.index'),
+            route('admin.teacher-directory.edit', $teacher),
             route('admin.contact-messages.index'),
             route('admin.contact-messages.show', $message),
         ] as $url) {
