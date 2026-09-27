@@ -53,6 +53,7 @@ class TermController extends Controller
 
         return view('admin.terms.form', [
             'term' => null,
+            'academicYearId' => $academicYearId,
             'statuses' => TermStatus::cases(),
             'academicYears' => $this->academicYears(),
             ...$this->formDefaults($academicYearId),
@@ -92,6 +93,7 @@ class TermController extends Controller
 
         return view('admin.terms.form', [
             'term' => $term,
+            'academicYearId' => (int) $term->academic_year_id,
             'statuses' => TermStatus::cases(),
             'academicYears' => $this->academicYears(),
             ...$this->formDefaults((int) $term->academic_year_id),

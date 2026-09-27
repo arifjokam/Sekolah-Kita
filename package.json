@@ -5,7 +5,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "test:e2e": "node tests/Browser/smoke.mjs"
+        "test:e2e": "node tests/Browser/smoke.mjs",
+        "test:e2e:prepare": "bash tests/Browser/prepare-chromium.sh"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

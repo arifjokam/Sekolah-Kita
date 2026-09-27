@@ -44,7 +44,7 @@
                     name="academic_year_id"
                     label="Tahun ajaran"
                     required
-                    :value="$term?->academic_year_id ?? request('academic_year_id')"
+                    :value="$term?->academic_year_id ?? ($academicYearId ?: request('academic_year_id'))"
                     :options="$academicYears->mapWithKeys(fn ($year) => [$year->id => $year->label.' · '.$year->status->label()])"
                 />
 

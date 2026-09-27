@@ -11,14 +11,31 @@
  * editor or a 500 from a lazy chunk cannot pass silently.
  *
  * Usage:
+ *   php artisan db:seed --class=DemoUatSeeder
  *   php artisan serve --host=127.0.0.1 --port=8123
  *   npm run build
  *   node tests/Browser/smoke.mjs [baseUrl]
  *
  * Credentials come from DevelopmentAccountsSeeder and are development-only.
+ *
+ * The suite restores every fixture it mutates — the schedule room and the
+ * returned document are both put back — so it can be run repeatedly without a
+ * re-seed in between. The one thing it does add is a clearly labelled draft
+ * academic year per run: Semester 1 and Semester 2 have to be created inside one
+ * year to prove they can coexist, and a semester cannot be deleted afterwards, so
+ * the journey takes a fresh year rather than filling the live one up.
  */
 
 import { chromium } from 'playwright'
+import { prepareChromiumRuntime } from './chromium-runtime.mjs'
+
+const runtime = prepareChromiumRuntime()
+if (!runtime.ok) {
+    console.error(`Chromium cannot start: ${runtime.detail}`)
+    console.error('This is an environment problem, not an application failure.')
+    process.exit(1)
+}
+console.log(`browser runtime: ${runtime.detail}`)
 
 const BASE = (process.argv[2] ?? 'http://127.0.0.1:8123').replace(/\/$/, '')
 const PASSWORD = 'SekolahKita#Dev2026'
@@ -117,6 +134,20 @@ let checks = 0
 
 function record(kind, detail) {
     problems.push(`${kind}: ${detail}`)
+}
+
+/**
+ * Submit the form that owns a given control, not the first submit on the page.
+ *
+ * The workspace layout renders the sign-out form in the header, above `<main>`,
+ * so its "Keluar" button is a `button[type="submit"]` that precedes every real
+ * form on the page. An unscoped `button[type="submit"]` click therefore signs the
+ * user out and silently converts the rest of the run into a wall of
+ * "missing text" failures against the login screen. Anchoring on the form that
+ * contains a known control is what a user actually does.
+ */
+function formSubmit(page, control) {
+    return page.locator(`form:has(${control}) button[type="submit"]`).first()
 }
 
 /**
@@ -468,55 +499,168 @@ async function checkMobileLayout(context) {    const page = await context.newPag
  * wrong field, so the *edit* of the second semester was rejected. Only driving
  * the form catches that.
  */
+/**
+ * The first academic year code of the form YYYY/YYYY that nothing has taken.
+ *
+ * A code is unique and format-checked, so a fixed one would only work on the first
+ * run. The index search is the same path an administrator uses to look one up, so
+ * this does not need a privileged endpoint of its own.
+ */
+async function findFreeAcademicYearCode(page) {
+    for (let start = 2035; start <= 2060; start += 1) {
+        const code = `${start}/${start + 1}`
+        await page.goto(`${BASE}/admin/academic-years?search=${encodeURIComponent(code)}`, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000,
+        })
+        const taken = await page.evaluate((needle) => document.body.innerText.includes(needle), code)
+        if (!taken) {
+            return code
+        }
+    }
+    throw new Error('no free academic year code between 2035/2036 and 2060/2061')
+}
+
+/**
+ * A real semester write, end to end, in an academic year of its own.
+ *
+ * A 200 on /admin/terms proves the page renders. It does not prove that Semester 1
+ * and Semester 2 can sit inside the same academic year, and that a repeated
+ * sequence in one year is refused. Only driving the form catches that — the
+ * uniqueness rule used to be attached to the wrong field, so the *edit* of the
+ * second semester was rejected.
+ *
+ * The journey creates its own draft academic year first. Working inside the
+ * current year instead would mean each run appends another semester to it until
+ * the year has no room left, so the second run of the suite would fail for a
+ * reason that has nothing to do with the behaviour under test. A fresh draft year
+ * per run keeps the journey repeatable and leaves the live year untouched.
+ */
 async function checkSemesterCreation(context) {
     const page = await context.newPage()
     watch(page, 'SEMESTER')
     checks++
 
     try {
-        await page.goto(`${BASE}/admin/terms/create`, { waitUntil: 'networkidle', timeout: 30000 })
-
-        // Work out a sequence number that does not collide with the fixture.
-        const next = await page.evaluate(() => {
-            const input = document.querySelector('input[name="sequence"]')
-            return Number(input?.value ?? 1) + 10
-        })
-
-        await page.fill('input[name="sequence"]', String(next))
-        await page.fill('input[name="label"]', `Semester Uji ${next}`)
-
-        const start = '2027-01-05'
-        const end = '2027-06-20'
-        await page.fill('input[name="starts_on"]', start)
-        await page.fill('input[name="ends_on"]', end)
-        await page.selectOption('select[name="status"]', 'draft')
-
-        await Promise.all([
-            page.waitForURL((url) => url.pathname === '/admin/terms', { timeout: 20000 }),
-            page.click('button[type="submit"]'),
-        ])
-
-        const body = await page.locator('body').innerText()
-        if (!body.includes(`Semester Uji ${next}`)) {
-            record('semester create', 'the new semester is not listed after saving')
+        // The seeded academic year must already be able to hold both semesters.
+        // This is the requirement the composite uniqueness rule exists for, and it
+        // is what a wrong rule on `academic_year_id` would have prevented.
+        await page.goto(`${BASE}/admin/terms`, { waitUntil: 'networkidle', timeout: 30000 })
+        const seeded = await page.locator('body').innerText()
+        for (const label of ['Semester 1', 'Semester 2']) {
+            if (!seeded.includes(label)) {
+                record('semester', `the seeded academic year does not list ${label}`)
+            }
         }
 
-        // The duplicate must be refused by the form, not by a 500.
-        await page.goto(`${BASE}/admin/terms/create`, { waitUntil: 'networkidle', timeout: 30000 })
-        await page.fill('input[name="sequence"]', String(next))
-        await page.fill('input[name="label"]', `Semester Kembar ${next}`)
-        await page.fill('input[name="starts_on"]', '2027-02-01')
-        await page.fill('input[name="ends_on"]', '2027-03-31')
+        // A code is unique and must look like YYYY/YYYY, so the journey takes the
+        // first free pair rather than a fixed one. Working in its own draft year is
+        // what keeps this repeatable: appending semesters to the live year would
+        // eventually fill it, and the next run would fail for a reason unrelated to
+        // the behaviour under test.
+        const yearCode = await findFreeAcademicYearCode(page)
+        const yearLabel = `Tahun Ajaran Uji Peramban ${yearCode}`
+        const yearStart = `${yearCode.slice(0, 4)}-07-01`
+        const yearEnd = `${Number(yearCode.slice(5)) + 1}-06-30`
+
+        await page.goto(`${BASE}/admin/academic-years/create`, { waitUntil: 'networkidle', timeout: 30000 })
+        await page.fill('input[name="code"]', yearCode)
+        await page.fill('input[name="label"]', yearLabel)
+        await page.fill('input[name="starts_on"]', yearStart)
+        await page.fill('input[name="ends_on"]', yearEnd)
         await page.selectOption('select[name="status"]', 'draft')
-        await page.click('button[type="submit"]')
+        await formSubmit(page, 'input[name="code"]').click()
+        await page.waitForLoadState('networkidle')
+
+        if (!page.url().includes('/admin/academic-years')) {
+            record('semester create', `the draft academic year was not saved: ${page.url()}`)
+            return
+        }
+
+        // The id comes from the index the save redirected to, so the journey does
+        // not depend on a hardcoded row.
+        const yearId = await page.evaluate((label) => {
+            const row = [...document.querySelectorAll('tr')].find((tr) => tr.innerText.includes(label))
+            const link = row?.querySelector('a[href*="/admin/academic-years/"]')
+            const id = link?.getAttribute('href')?.match(/\/admin\/academic-years\/(\d+)/)?.[1]
+            return id ? Number(id) : null
+        }, yearLabel)
+
+        if (!yearId) {
+            record('semester create', 'the new academic year is not listed after saving')
+            return
+        }
+
+        // Create Semester 1 and then Semester 2 in that same year. The create form
+        // must arrive with a year already chosen: an unselected required select
+        // fails on the placeholder, and the sequence and date range the controller
+        // suggests are derived from the selected year.
+        for (const sequence of [1, 2]) {
+            await page.goto(`${BASE}/admin/terms/create?academic_year_id=${yearId}`, {
+                waitUntil: 'networkidle',
+                timeout: 30000,
+            })
+
+            const academicYear = await page.inputValue('select[name="academic_year_id"]')
+            if (Number(academicYear) !== yearId) {
+                record('semester create', `the create form is not pointed at the test year (${academicYear})`)
+                return
+            }
+
+            // Submit what the form proposes. The controller derives the next free
+            // sequence and a range that fits the year without overlapping a sibling,
+            // so hardcoded dates would only pass by luck.
+            const proposed = await page.evaluate(() => ({
+                sequence: document.querySelector('input[name="sequence"]')?.value ?? '',
+                startsOn: document.querySelector('input[name="starts_on"]')?.value ?? '',
+                endsOn: document.querySelector('input[name="ends_on"]')?.value ?? '',
+            }))
+
+            if (Number(proposed.sequence) !== sequence) {
+                record('semester create', `expected sequence ${sequence} to be free next, got ${proposed.sequence}`)
+                return
+            }
+
+            await page.selectOption('select[name="status"]', 'draft')
+
+            await Promise.all([
+                page.waitForURL((url) => url.pathname === '/admin/terms', { timeout: 20000 }),
+                formSubmit(page, 'input[name="sequence"]').click(),
+            ])
+
+            const body = await page.locator('body').innerText()
+            if (!body.includes(yearLabel)) {
+                record('semester create', `Semester ${sequence} is not listed under ${yearLabel} after saving`)
+            }
+        }
+
+        // Both semesters now share one academic year. Repeating a sequence inside
+        // that year must be refused by the form, not by a 500.
+        await page.goto(`${BASE}/admin/terms/create?academic_year_id=${yearId}`, {
+            waitUntil: 'networkidle',
+            timeout: 30000,
+        })
+        await page.fill('input[name="sequence"]', '1')
+        await page.fill('input[name="label"]', 'Semester Kembar')
+        await page.selectOption('select[name="status"]', 'draft')
+        await formSubmit(page, 'input[name="sequence"]').click()
         await page.waitForLoadState('networkidle')
 
         const duplicate = await page.locator('body').innerText()
         if (!duplicate.includes('sudah digunakan')) {
             record('semester duplicate', 'a repeated sequence in the same year was not refused in the form')
         }
+        // A refused form must come back with the operator's input intact. Read the
+        // control rather than the page text: an input's value is an attribute and
+        // never appears in `innerText`.
+        const keptLabel = await page.inputValue('input[name="label"]')
+        if (keptLabel !== 'Semester Kembar') {
+            record('semester duplicate', `the refused form did not keep the submitted label: "${keptLabel}"`)
+        }
 
-        process.stdout.write(`      semester: created sequence ${next}, duplicate refused in the form\n`)
+        process.stdout.write(
+            `      semester: created Semester 1 and 2 in one academic year, duplicate sequence refused in the form\n`,
+        )
     } catch (error) {
         record('semester error', error.message)
     } finally {
@@ -540,12 +684,13 @@ async function checkScheduleCreation(context) {
         await page.goto(`${BASE}/admin/class-schedules`, { waitUntil: 'networkidle', timeout: 30000 })
 
         const existing = await page.evaluate(() => {
-            const cell = document.querySelector('a[href*="/admin/class-schedules/"]')
-            if (!cell) {
-                return null
-            }
-            const id = cell.getAttribute('href').split('/').pop()
-            return Number(id)
+            // Only a numeric href is a lesson. The toolbar's "create" link also
+            // matches `/admin/class-schedules/`, and `Number('create')` is NaN,
+            // which would report a missing fixture instead of the real answer.
+            const cell = [...document.querySelectorAll('a[href*="/admin/class-schedules/"]')]
+                .map((a) => a.getAttribute('href'))
+                .find((href) => /\/admin\/class-schedules\/\d+$/.test(href))
+            return cell ? Number(cell.split('/').pop()) : null
         })
 
         if (!existing) {
@@ -559,7 +704,7 @@ async function checkScheduleCreation(context) {
         await page.fill('input[name="room"]', 'R. UJI')
         await Promise.all([
             page.waitForURL((url) => /\/admin\/class-schedules\/\d+$/.test(url.pathname), { timeout: 20000 }),
-            page.click('button[type="submit"]'),
+            formSubmit(page, 'input[name="room"]').click(),
         ])
 
         const detail = await page.locator('body').innerText()
@@ -572,7 +717,7 @@ async function checkScheduleCreation(context) {
         await page.fill('input[name="room"]', originalRoom)
         await Promise.all([
             page.waitForURL((url) => /\/admin\/class-schedules\/\d+$/.test(url.pathname), { timeout: 20000 }),
-            page.click('button[type="submit"]'),
+            formSubmit(page, 'input[name="room"]').click(),
         ])
 
         process.stdout.write('      schedule: updated a lesson and restored the fixture value\n')
@@ -595,6 +740,8 @@ async function checkCandidateRevisionLoop(context) {
     const page = await context.newPage()
     watch(page, 'CANDIDATE')
     checks++
+
+    let replacedDocumentId = null
 
     try {
         await login(page, ACCOUNTS.calon)
@@ -626,6 +773,14 @@ async function checkCandidateRevisionLoop(context) {
         // the multipart form and the private storage path work in a browser.
         const uploadForm = page.locator('form:has(input[type="file"])').first()
         if ((await uploadForm.count()) > 0) {
+            // Identify the slot by its heading before uploading. The upload
+            // supersedes the previous version into a *new* row and may withdraw
+            // the replace form, so an id captured beforehand is stale and cannot
+            // be read off the form afterwards.
+            const typeLabel = await uploadForm.evaluate(
+                (form) => form.closest('li')?.querySelector('h2')?.textContent?.trim() ?? null,
+            )
+
             await uploadForm.locator('input[type="file"]').setInputFiles({
                 name: 'akta-kelahiran.pdf',
                 mimeType: 'application/pdf',
@@ -640,6 +795,14 @@ async function checkCandidateRevisionLoop(context) {
             if (!afterUpload.includes('Menunggu verifikasi')) {
                 record('candidate upload', 'the replaced document did not return to "menunggu verifikasi"')
             }
+
+            replacedDocumentId = await page.evaluate((label) => {
+                const slot = [...document.querySelectorAll('li')].find(
+                    (li) => li.querySelector('h2')?.textContent?.trim() === label,
+                )
+                const href = slot?.querySelector('a[href*="/unduh"]')?.getAttribute('href')
+                return href?.match(/(\d+)\/unduh/)?.[1] ?? null
+            }, typeLabel)
         } else {
             record('candidate upload', 'no replacement form was offered for the returned document')
         }
@@ -649,6 +812,77 @@ async function checkCandidateRevisionLoop(context) {
         record('candidate error', error.message)
     } finally {
         await page.close()
+    }
+
+    return replacedDocumentId
+}
+
+/**
+ * Put the returned document back the way the fixture describes it.
+ *
+ * The journey above replaces the document, which is the point of the journey, but
+ * it leaves the fixture showing a document awaiting review instead of one awaiting
+ * a replacement. Left alone, the next run of the suite would find nothing to
+ * repair and would stop covering the flow it exists to cover. The schedule journey
+ * restores its own fixture value for the same reason.
+ *
+ * This is fixture hygiene rather than a user journey, so it goes through the
+ * request context — which shares the administrator's session — instead of driving
+ * the hidden revision form in the review screen. The route and the field are the
+ * real ones, so it restores through the same policy-checked write an administrator
+ * would use.
+ */
+async function restoreCandidateRevisionFixture(browser, documentId) {
+    if (!documentId) {
+        return
+    }
+
+    const context = await browser.newContext()
+    const page = await context.newPage()
+
+    try {
+        await login(page, ACCOUNTS.admin)
+
+        // The revision form carries the CSRF token and the route, so the token is
+        // read from a real page load rather than fabricated.
+        await page.goto(`${BASE}/admin/ppdb/applications`, { waitUntil: 'networkidle', timeout: 30000 })
+        const applicationHref = await page.evaluate(() => {
+            const link = [...document.querySelectorAll('a[href*="/admin/ppdb/applications/"]')].find((a) =>
+                /\d+$/.test(a.getAttribute('href') ?? ''),
+            )
+            return link?.getAttribute('href') ?? null
+        })
+
+        if (!applicationHref) {
+            return
+        }
+
+        await page.goto(`${BASE}${new URL(applicationHref).pathname}`, {
+            waitUntil: 'networkidle',
+            timeout: 30000,
+        })
+
+        const token = await page.inputValue('input[name="_token"]')
+        const response = await context.request.post(
+            `${BASE}/admin/ppdb/documents/${documentId}/revision`,
+            {
+                form: {
+                    _token: token,
+                    _method: 'PATCH',
+                    reviewer_note: 'Dokumen tidak terbaca. Silakan unggah ulang dengan foto lebih terang.',
+                },
+                maxRedirects: 0,
+            },
+        )
+
+        if (response.status() !== 302) {
+            record('candidate restore', `the fixture could not be restored: HTTP ${response.status()}`)
+        }
+    } catch (error) {
+        record('candidate restore', error.message)
+    } finally {
+        await page.close()
+        await context.close()
     }
 }
 
@@ -758,8 +992,11 @@ try {
     // candidate and mutates a document, so it must not share a session with the
     // read-only scenario pass above.
     const candidateContext = await browser.newContext()
-    await checkCandidateRevisionLoop(candidateContext)
+    const replacedDocumentId = await checkCandidateRevisionLoop(candidateContext)
     await candidateContext.close()
+
+    // Restore the fixture the loop consumed, so the suite is repeatable.
+    await restoreCandidateRevisionFixture(browser, replacedDocumentId)
 
     // Public pages need no session at all.
     const guestContext = await browser.newContext()

@@ -44,6 +44,7 @@ use App\Models\TeachingAssignment;
 use App\Models\Term;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -107,9 +108,23 @@ class DemoUatSeeder extends Seeder
      */
     private function terms(AcademicYear $year): array
     {
+        // The two semesters split the academic year itself, rather than being
+        // placed by offsets from "now".
+        //
+        // The offsets this used instead produced semesters that shared a boundary
+        // month, and the application treats two semesters of one year as a
+        // conflict whenever their ranges touch. So the fixture shipped a timetable
+        // the application would itself refuse. Splitting the year at its midpoint
+        // and starting the second semester the day after makes both rules — inside
+        // the year, and not overlapping a sibling — true by construction, and it is
+        // deterministic, so re-seeding lands on the same dates.
+        $startsOn = $year->starts_on->copy()->startOfDay();
+        $endsOn = $year->ends_on->copy()->startOfDay();
+        $midpoint = $startsOn->copy()->addDays(intdiv((int) $startsOn->diffInDays($endsOn), 2));
+
         $definitions = [
-            ['sequence' => 1, 'label' => 'Semester 1', 'offset_start' => '-5 months', 'offset_end' => '+1 month'],
-            ['sequence' => 2, 'label' => 'Semester 2', 'offset_start' => '+1 month', 'offset_end' => '+7 months'],
+            ['sequence' => 1, 'label' => 'Semester 1', 'starts_on' => $startsOn, 'ends_on' => $midpoint],
+            ['sequence' => 2, 'label' => 'Semester 2', 'starts_on' => $midpoint->copy()->addDay(), 'ends_on' => $endsOn],
         ];
 
         $terms = [];
@@ -122,8 +137,8 @@ class DemoUatSeeder extends Seeder
             ]);
             $term->forceFill([
                 'label' => $definition['label'],
-                'starts_on' => $term->starts_on ?? now()->modify($definition['offset_start'])->toDateString(),
-                'ends_on' => $term->ends_on ?? now()->modify($definition['offset_end'])->toDateString(),
+                'starts_on' => $definition['starts_on']->toDateString(),
+                'ends_on' => $definition['ends_on']->toDateString(),
                 'status' => $term->exists ? $term->status : ($activeAssigned ? TermStatus::Draft : TermStatus::Active),
             ])->save();
             $activeAssigned = true;
@@ -469,6 +484,16 @@ class DemoUatSeeder extends Seeder
             $taken[$dimension][$day][$band] = true;
         };
 
+        // The in-memory map above only covers what this run has just claimed. The
+        // timetable it produces also has to agree with what is already stored,
+        // because the application refuses to save a double-booked class, teacher
+        // or room. Without this the second run of the seeder can place a new
+        // assignment on a slot an earlier run already filled — `firstOrCreate`
+        // keys on subject and teacher too, so it would happily insert a second
+        // lesson in the same class and hour, leaving a demo dataset that the app
+        // considers impossible and that no lesson in it can be edited.
+        $stored = $this->occupiedSlots($term);
+
         foreach ($assignments->groupBy('class_id') as $classId => $classAssignments) {
             foreach ($classAssignments as $assignment) {
                 $chosen = null;
@@ -480,14 +505,21 @@ class DemoUatSeeder extends Seeder
                     for ($dayIndex = 0; $dayIndex < count($teachingDays); $dayIndex++) {
                         $classKey = 'class:'.$classId;
                         $teacherKey = 'teacher:'.$assignment->teacher_id;
+                        $slot = $teachingDays[$dayIndex]->value.'@'.sprintf('%02d:00', $firstHour + $band);
 
                         if ($isTaken($classKey, $dayIndex, $band) || $isTaken($teacherKey, $dayIndex, $band)) {
+                            continue;
+                        }
+
+                        if ($this->slotIsBooked($stored[$slot] ?? [], $assignment)) {
                             continue;
                         }
 
                         $chosen = [$dayIndex, $band];
                         $claim($classKey, $dayIndex, $band);
                         $claim($teacherKey, $dayIndex, $band);
+
+                        $stored[$slot][] = $this->slotIdentity($assignment);
 
                         break;
                     }
@@ -519,6 +551,151 @@ class DemoUatSeeder extends Seeder
                 ]);
             }
         }
+
+        $this->reconcileScheduleConflicts($term);
+    }
+
+    /**
+     * @return array{class_id: int, subject_id: int, teacher_id: int}
+     */
+    private function slotIdentity(TeachingAssignment $assignment): array
+    {
+        return [
+            'class_id' => (int) $assignment->class_id,
+            'subject_id' => (int) $assignment->subject_id,
+            'teacher_id' => (int) $assignment->teacher_id,
+        ];
+    }
+
+    /**
+     * Whether a stored lesson in this slot collides with the assignment.
+     *
+     * A lesson that *is* this assignment does not collide: `firstOrCreate` keys on
+     * class, subject, teacher, term, day and start, so it will find that row and
+     * reuse it. Treating it as taken would push the assignment to the next free
+     * band on every re-run and quietly double the timetable.
+     *
+     * @param  array<int, array{class_id: int, subject_id: int, teacher_id: int}>  $stored
+     */
+    private function slotIsBooked(array $stored, TeachingAssignment $assignment): bool
+    {
+        $identity = $this->slotIdentity($assignment);
+
+        foreach ($stored as $lesson) {
+            if ($lesson === $identity) {
+                continue;
+            }
+
+            if ($lesson['class_id'] === $identity['class_id'] || $lesson['teacher_id'] === $identity['teacher_id']) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Retire the active lessons that double-book a class or a teacher.
+     *
+     * Earlier versions of this seeder tracked its slot usage only in memory, so a
+     * later run could add a second lesson to a slot an earlier run had already
+     * filled. Those rows are ones the application itself refuses to save, which
+     * left a demo timetable that could not be edited through the UI.
+     *
+     * They are deactivated rather than deleted: attendance sessions reference a
+     * lesson, and deactivation is the same lifecycle the administrator screen
+     * offers, so nothing is lost and the historical record still resolves. Within
+     * a conflicting set the earliest lesson is kept, because that is the one the
+     * fixture originally placed.
+     */
+    private function reconcileScheduleConflicts(Term $term): void
+    {
+        $active = ClassSchedule::query()
+            ->where('term_id', $term->getKey())
+            ->where('status', ScheduleStatus::Active)
+            ->orderBy('id')
+            ->get();
+
+        /** @var array<int, true> $retired */
+        $retired = [];
+
+        $overlaps = static function (ClassSchedule $a, ClassSchedule $b): bool {
+            return $a->day_of_week === $b->day_of_week
+                && $a->starts_at < $b->ends_at
+                && $b->starts_at < $a->ends_at;
+        };
+
+        $conflictsOn = static function (Collection $lessons) use ($overlaps, $retired): array {
+            $conflicts = [];
+
+            foreach ($lessons as $lesson) {
+                if (isset($retired[$lesson->getKey()])) {
+                    continue;
+                }
+
+                foreach ($lessons as $other) {
+                    if ($other->getKey() === $lesson->getKey() || isset($retired[$other->getKey()])) {
+                        continue;
+                    }
+
+                    if ($overlaps($lesson, $other)) {
+                        $conflicts[$other->getKey()] = $other;
+                    }
+                }
+            }
+
+            return $conflicts;
+        };
+
+        foreach (['class_id', 'teacher_id'] as $dimension) {
+            $conflicts = [];
+
+            foreach ($active->groupBy($dimension) as $lessons) {
+                $conflicts += $conflictsOn($lessons);
+            }
+
+            foreach (array_keys($conflicts) as $id) {
+                $retired[$id] = true;
+            }
+        }
+
+        if ($retired === []) {
+            return;
+        }
+
+        ClassSchedule::query()
+            ->whereIn('id', array_keys($retired))
+            ->update(['status' => ScheduleStatus::Inactive]);
+    }
+
+    /**
+     * Class and teacher bookings already stored for a term, keyed by slot.
+     *
+     * A slot is `day_of_week@HH:00`, matching the hourly bands the seeder lays
+     * lessons on. Only active lessons count: an inactive one still occupies a row
+     * for attendance history, but it is not a booking the timetable has to avoid.
+     *
+     * @return array<string, array<int, array{class_id: int, subject_id: int, teacher_id: int}>>
+     */
+    private function occupiedSlots(Term $term): array
+    {
+        $slots = [];
+
+        ClassSchedule::query()
+            ->where('term_id', $term->getKey())
+            ->where('status', ScheduleStatus::Active)
+            ->get(['class_id', 'subject_id', 'teacher_id', 'day_of_week', 'starts_at'])
+            ->each(function (ClassSchedule $schedule) use (&$slots): void {
+                $slot = $schedule->day_of_week->value.'@'.substr((string) $schedule->starts_at, 0, 5);
+
+                $slots[$slot][] = [
+                    'class_id' => (int) $schedule->class_id,
+                    'subject_id' => (int) $schedule->subject_id,
+                    'teacher_id' => (int) $schedule->teacher_id,
+                ];
+            });
+
+        return $slots;
     }
 
     /**
@@ -820,24 +997,26 @@ class DemoUatSeeder extends Seeder
             ]);
             $application->save();
 
-            if ($application->guardians()->exists()) {
-                continue;
+            // The guardian is created once, but the document set below is
+            // reasserted on every run: the browser suite drives the replacement
+            // journey against these fixtures, and skipping the block because a
+            // guardian already exists would leave the mutated state in place.
+            if (! $application->guardians()->exists()) {
+                $application->guardians()->create([
+                    'legal_name' => $definition['name'].' Ayah',
+                    'national_id' => '327301120180000'.$index,
+                    'relationship_type' => GuardianRelationshipType::Father,
+                    'phone' => $definition['phone'],
+                    'whatsapp_number' => $definition['phone'],
+                    'occupation' => 'Wiraswasta',
+                    'address' => $applicant['address'],
+                    'is_primary_contact' => true,
+                    'is_emergency_contact' => true,
+                    'priority_order' => 1,
+                ]);
             }
 
-            $application->guardians()->create([
-                'legal_name' => $definition['name'].' Ayah',
-                'national_id' => '327301120180000'.$index,
-                'relationship_type' => GuardianRelationshipType::Father,
-                'phone' => $definition['phone'],
-                'whatsapp_number' => $definition['phone'],
-                'occupation' => 'Wiraswasta',
-                'address' => $applicant['address'],
-                'is_primary_contact' => true,
-                'is_emergency_contact' => true,
-                'priority_order' => 1,
-            ]);
-
-            foreach (AdmissionDocumentType::required() as $documentIndex => $type) {
+            foreach (AdmissionDocumentType::required() as $type) {
                 $needsRevision = $definition['needs_revision'] && $type === AdmissionDocumentType::GuardianIdentity;
 
                 $media = MediaAsset::firstOrCreate([
@@ -859,25 +1038,14 @@ class DemoUatSeeder extends Seeder
                     'visibility' => 'private',
                 ]);
 
-                $document = ApplicationDocument::firstOrCreate([
-                    'admission_application_id' => $application->getKey(),
-                    'document_type' => $type,
-                    'version' => 1,
-                ], [
-                    'media_asset_id' => $media->getKey(),
-                    'verification_status' => $needsRevision
-                        ? AdmissionDocumentVerificationStatus::NeedsRevision
-                        : AdmissionDocumentVerificationStatus::Verified,
-                    'reviewed_by_user_id' => $reviewerId,
-                    'reviewed_at' => $submittedAt->copy()->addHours(6),
-                    'reviewer_note' => $needsRevision ? 'Dokumen tidak terbaca. Silakan unggah ulang dengan foto lebih terang.' : null,
-                ]);
-
-                if ($needsRevision) {
-                    continue;
-                }
-
-                unset($documentIndex, $document);
+                $this->seedApplicationDocument(
+                    $application,
+                    $type,
+                    $media,
+                    $reviewerId,
+                    $submittedAt,
+                    $needsRevision,
+                );
             }
 
             ApplicationStatusHistory::firstOrCreate([
@@ -912,6 +1080,51 @@ class DemoUatSeeder extends Seeder
                 $application->forceFill(['workflow_version' => 2])->save();
             }
         }
+    }
+
+    /**
+     * Reassert one seeded document category back to its specified state.
+     *
+     * The browser suite exercises the replacement journey against these fixtures:
+     * it uploads a corrected file, which supersedes version 1 and inserts a
+     * version 2 sitting in "pending". `firstOrCreate` would then leave the fixture
+     * in that mutated state, so the next run of the suite would find no document
+     * waiting for a replacement and the journey would silently stop covering the
+     * flow it exists to cover.
+     *
+     * So the seeder owns this dataset outright, which is also what its own test
+     * asserts: exactly one document per required category. Replacements created
+     * against a seeded fixture are derived from it, and are removed here so the
+     * documented state is what a developer sees. Nothing outside these fixture
+     * applications is touched, and a real applicant is never a seeded applicant.
+     */
+    private function seedApplicationDocument(
+        AdmissionApplication $application,
+        AdmissionDocumentType $type,
+        MediaAsset $media,
+        ?int $reviewerId,
+        Carbon $submittedAt,
+        bool $needsRevision,
+    ): ApplicationDocument {
+        ApplicationDocument::query()
+            ->where('admission_application_id', $application->getKey())
+            ->where('document_type', $type)
+            ->where('version', '>', 1)
+            ->delete();
+
+        return ApplicationDocument::updateOrCreate([
+            'admission_application_id' => $application->getKey(),
+            'document_type' => $type,
+            'version' => 1,
+        ], [
+            'media_asset_id' => $media->getKey(),
+            'verification_status' => $needsRevision
+                ? AdmissionDocumentVerificationStatus::NeedsRevision
+                : AdmissionDocumentVerificationStatus::Verified,
+            'reviewed_by_user_id' => $reviewerId,
+            'reviewed_at' => $submittedAt->copy()->addHours(6),
+            'reviewer_note' => $needsRevision ? 'Dokumen tidak terbaca. Silakan unggah ulang dengan foto lebih terang.' : null,
+        ]);
     }
 
     /**

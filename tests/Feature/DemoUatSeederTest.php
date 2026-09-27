@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AcademicYearStatus;
 use App\Enums\AdmissionDocumentType;
 use App\Enums\AdmissionDocumentVerificationStatus;
 use App\Enums\AssignmentStatus;
@@ -179,6 +180,132 @@ class DemoUatSeederTest extends TestCase
 
         $this->assertNoScheduleClash($schedules, 'class_id');
         $this->assertNoScheduleClash($schedules, 'teacher_id');
+    }
+
+    /**
+     * The timetable has to survive being seeded again.
+     *
+     * The seeder used to track its slot usage only in memory, so a second run
+     * placed a lesson on a slot an earlier run had already filled. `firstOrCreate`
+     * keys on subject and teacher as well, so it inserted a *second* lesson in the
+     * same class and hour rather than reusing the first. The result was a demo
+     * timetable the application itself refuses to edit, which is exactly what the
+     * browser suite tripped over when it tried to save a room change.
+     */
+    public function test_seeding_again_does_not_double_book_a_class_or_a_teacher(): void
+    {
+        $this->seedFixtures();
+        $this->seedFixtures();
+        $this->seedFixtures();
+
+        $active = ClassSchedule::query()
+            ->where('status', ScheduleStatus::Active->value)
+            ->get();
+
+        $this->assertNoScheduleClash($active, 'class_id');
+        $this->assertNoScheduleClash($active, 'teacher_id');
+    }
+
+    /**
+     * Two semesters of one academic year must not overlap.
+     *
+     * The seeder placed its two semesters by offsets from "now" that shared a
+     * boundary month, and the application treats two semesters of one year as a
+     * conflict whenever their ranges touch. The fixture therefore shipped a
+     * timetable the application would refuse to save, so the dates are now derived
+     * from the academic year itself.
+     */
+    public function test_the_seeded_semesters_sit_inside_the_year_and_do_not_overlap(): void
+    {
+        $this->seedFixtures();
+
+        $year = AcademicYear::query()->where('status', AcademicYearStatus::Active->value)->firstOrFail();
+        $terms = Term::query()
+            ->where('academic_year_id', $year->getKey())
+            ->orderBy('sequence')
+            ->get();
+
+        $this->assertGreaterThanOrEqual(2, $terms->count(), 'An academic year holds both semesters.');
+
+        foreach ($terms as $term) {
+            $this->assertGreaterThanOrEqual(
+                $year->starts_on->toDateString(),
+                $term->starts_on->toDateString(),
+                sprintf('Semester %s starts inside the academic year.', $term->sequence),
+            );
+            $this->assertLessThanOrEqual(
+                $year->ends_on->toDateString(),
+                $term->ends_on->toDateString(),
+                sprintf('Semester %s ends inside the academic year.', $term->sequence),
+            );
+        }
+
+        for ($i = 1; $i < $terms->count(); $i++) {
+            $previous = $terms->get($i - 1);
+            $current = $terms->get($i);
+
+            $this->assertLessThan(
+                $current->starts_on->toDateString(),
+                $previous->ends_on->toDateString(),
+                sprintf(
+                    'Semester %s must end before Semester %s begins, exactly as the application requires.',
+                    $previous->sequence,
+                    $current->sequence,
+                ),
+            );
+        }
+    }
+
+    /**
+     * The applicant fixture the browser suite drives must be restorable.
+     *
+     * The suite replaces the returned document, which supersedes it and leaves a
+     * new version awaiting review. `firstOrCreate` cannot undo that, so without
+     * reasserting the fixture the next run found nothing to repair and stopped
+     * covering the revision loop entirely.
+     */
+    public function test_reseeding_restores_the_document_waiting_for_a_replacement(): void
+    {
+        $this->seedFixtures();
+
+        $user = User::query()->where('email', 'calon.perbaikan@sekolah.local')->firstOrFail();
+        $application = AdmissionApplication::query()
+            ->where('applicant_user_id', $user->getKey())
+            ->firstOrFail();
+
+        // Reproduce what a replacement does: supersede the pending document and
+        // insert a new version awaiting review.
+        $original = $application->documents()->where('verification_status', AdmissionDocumentVerificationStatus::NeedsRevision->value)->firstOrFail();
+        $original->forceFill(['verification_status' => AdmissionDocumentVerificationStatus::Superseded->value])->save();
+        $application->documents()->create([
+            'media_asset_id' => $original->media_asset_id,
+            'document_type' => $original->document_type,
+            'version' => $original->version + 1,
+            'verification_status' => AdmissionDocumentVerificationStatus::Pending->value,
+        ]);
+
+        $this->assertSame(
+            0,
+            $application->documents()->where('verification_status', AdmissionDocumentVerificationStatus::NeedsRevision->value)->count(),
+            'The replacement really did consume the correction request.',
+        );
+
+        $this->seedFixtures();
+
+        $this->assertSame(
+            1,
+            $application->documents()->where('verification_status', AdmissionDocumentVerificationStatus::NeedsRevision->value)->count(),
+            'Re-seeding puts the correction request back, with its reviewer note.',
+        );
+        $this->assertNotNull(
+            $application->documents()->where('verification_status', AdmissionDocumentVerificationStatus::NeedsRevision->value)->firstOrFail()->reviewer_note,
+            'The applicant still sees a reason for the request.',
+        );
+        $this->assertSame(
+            count(AdmissionDocumentType::required()),
+            $application->documents()->whereIn('document_type', AdmissionDocumentType::required())->count(),
+            'Re-seeding leaves exactly one document per required category.',
+        );
     }
 
     /**

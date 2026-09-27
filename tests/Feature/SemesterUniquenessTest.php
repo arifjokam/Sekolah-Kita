@@ -215,4 +215,44 @@ class SemesterUniquenessTest extends TestCase
             ->assertOk()
             ->assertSee('Semester 1');
     }
+
+    /**
+     * The create form must arrive pointing at the current academic year.
+     *
+     * The controller worked out the current year and derived the next free
+     * sequence and a fitting date range from it, but the view read only the query
+     * string, so the select sat on its "Pilih salah satu" placeholder. Required
+     * validation then refused the save, and the sequence and dates on screen
+     * described a year the form was not even pointed at.
+     */
+    public function test_the_create_form_preselects_the_current_academic_year(): void
+    {
+        $admin = $this->admin();
+
+        $current = AcademicYear::factory()->active()->create([
+            'starts_on' => '2026-07-01',
+            'ends_on' => '2027-06-30',
+        ]);
+        $other = AcademicYear::factory()->create([
+            'starts_on' => '2024-07-01',
+            'ends_on' => '2025-06-30',
+        ]);
+
+        $this->actingAs($admin)->get(route('admin.terms.create'))
+            ->assertOk()
+            ->assertSee('name="academic_year_id"', false)
+            ->assertSee('value="'.$current->getKey().'" selected', false);
+    }
+
+    public function test_the_create_form_preselects_the_year_asked_for_in_the_query_string(): void
+    {
+        $admin = $this->admin();
+
+        AcademicYear::factory()->active()->create(['starts_on' => '2026-07-01', 'ends_on' => '2027-06-30']);
+        $asked = AcademicYear::factory()->create(['starts_on' => '2024-07-01', 'ends_on' => '2025-06-30']);
+
+        $this->actingAs($admin)->get(route('admin.terms.create', ['academic_year_id' => $asked->getKey()]))
+            ->assertOk()
+            ->assertSee('value="'.$asked->getKey().'" selected', false);
+    }
 }
